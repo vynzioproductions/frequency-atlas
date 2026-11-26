@@ -252,28 +252,32 @@
       for (const st of STATIONS) {
         const { chart } = rawChart(st, x);
         const ranked = spinsAt(st, x);
-        const onChart = new Set(chart.map(c => c.song.id));
+        const posOf = new Map(chart.map(c => [c.song.id, c.pos]));
         ranked.forEach(r => {
-          const t = m.get(r.song.id) || { song: r.song, spins: 0, stations: 0 };
-          t.spins += r.spins; if (onChart.has(r.song.id)) t.stations++;
+          const t = m.get(r.song.id) || { song: r.song, spins: 0, stations: 0, plays: 0, by: [] };
+          const pos = posOf.get(r.song.id) ?? null;
+          t.spins += r.spins; t.plays++; if (pos) t.stations++;
+          t.by.push({ st, spins: r.spins, pos });
           m.set(r.song.id, t);
         });
       }
-      return [...m.values()].sort((a, b) => b.spins - a.spins).slice(0, NETWORK_SIZE).map((e, i) => ({ pos: i + 1, ...e }));
+      return [...m.values()].sort((a, b) => b.spins - a.spins).map((e, i) => ({ pos: i + 1, ...e }));
     };
     const peaks = new Map(), weeks = new Map();
     let last = new Map(), res = null;
     for (let x = k - HISTORY_WEEKS; x <= k; x++) {
-      const c = tally(x);
+      const all = tally(x), c = all.slice(0, NETWORK_SIZE);
       if (x === k) {
         res = c.map(e => {
-          const lw = last.get(e.song.id)?.pos ?? null;
+          const lwp = last.get(e.song.id)?.pos; const lw = lwp && lwp <= NETWORK_SIZE ? lwp : null;
           const wks = (weeks.get(e.song.id) || 0) + 1;
           let move = lw == null ? (wks > 1 ? 'RE' : 'NEW') : lw === e.pos ? '=' : lw > e.pos ? '▲' + (lw - e.pos) : '▼' + (e.pos - lw);
-          return { ...e, lw, wks, pk: Math.min(peaks.get(e.song.id) ?? 99, e.pos), move, bullet: lw != null && e.spins > (last.get(e.song.id)?.spins || 0) };
+          const prevBy = new Map((last.get(e.song.id)?.by || []).map(b => [b.st.id, b]));
+          const by = e.by.map(b => ({ ...b, lw: prevBy.get(b.st.id)?.spins ?? 0, lwPos: prevBy.get(b.st.id)?.pos ?? null })).sort((a, b) => b.spins - a.spins);
+          return { ...e, by, spinsLW: last.get(e.song.id)?.spins || 0, lw, wks, pk: Math.min(peaks.get(e.song.id) ?? 99, e.pos), move, bullet: lw != null && e.spins > (last.get(e.song.id)?.spins || 0) };
         });
       }
-      last = new Map(c.map(e => [e.song.id, e]));
+      last = new Map(all.map(e => [e.song.id, e]));
       c.forEach(e => { weeks.set(e.song.id, (weeks.get(e.song.id) || 0) + 1); peaks.set(e.song.id, Math.min(peaks.get(e.song.id) ?? 99, e.pos)); });
     }
     return res;

@@ -284,13 +284,41 @@
       return;
     }
     const rows = E.networkChart(state.week);
+    const open = state.netOpen || (state.netOpen = new Set());
+    const detail = (e) => {
+      const max = e.by[0]?.spins || 1;
+      const ones = e.by.filter(b => b.pos === 1).length;
+      const delta = (b) => { const d = b.spins - b.lw; return b.lw === 0 ? '<span class="dn new">new</span>' : d === 0 ? '<span class="dn">±0</span>' : `<span class="dn ${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}</span>`; };
+      return `<div class="netd" id="nd-${esc(e.song.id)}">
+        <p class="netsum">Played on <b>${e.plays}</b> of ${E.STATIONS.length} stations · in the Top 30 on <b>${e.stations}</b>${ones ? ` · <b>#1</b> on ${ones}` : ''} · ${e.spins.toLocaleString()} spins (${e.spinsLW ? (e.spins >= e.spinsLW ? '+' : '') + (e.spins - e.spinsLW).toLocaleString() + ' vs last week' : 'new this week'})</p>
+        <ul class="bars">${e.by.map(b => `<li>
+          <a href="#station-${esc(b.st.id)}" class="bst" style="--c:${esc(b.st.color)}"><span class="sw"></span>${esc(b.st.name)}<small>${esc(b.st.city)}</small></a>
+          <span class="bar"><i style="width:${Math.max(3, Math.round(b.spins / max * 100))}%;background:${esc(b.st.color)}"></i></span>
+          <span class="bn"><b>${b.spins}</b> ${delta(b)}</span>
+          <span class="bp">${b.pos ? '#' + b.pos : '<span title="In rotation, not in the Top 30">rot.</span>'}</span>
+        </li>`).join('')}</ul>
+        <button class="btn btn-ghost netplay" data-play-net="${esc(e.song.id)}">▶ Hear it</button>
+      </div>`;
+    };
     pane.innerHTML = weekBar(state.week) + `<ol class="chart">${rows.map(e => `
-      <li class="row ${e.pos <= 3 ? 'top3' : ''}" style="--c:#2ee6c8">
-        <span class="pos">${e.pos}</span><span class="mv ${moveCls(e.move)}">${esc(e.move === '=' ? '–' : e.move)}</span>
-        <span class="ti"><b>${esc(e.song.title)}</b><span>${esc(e.song.artist)}</span></span>
-        <span class="st"><b>${e.spins.toLocaleString()}</b>${e.bullet ? '<span class="badge bul">●</span>' : ''} spins<br>${e.stations}/${E.STATIONS.length} stations · PK ${e.pk}</span>
-      </li>`).join('')}</ol><p class="legend">Total spins across every station. "Stations" counts how many station Top 30s the song is on this week.
+      <li class="netrow ${open.has(e.song.id) ? 'open' : ''}">
+        <button class="row ${e.pos <= 3 ? 'top3' : ''}" style="--c:#2ee6c8" data-net-toggle="${esc(e.song.id)}" aria-expanded="${open.has(e.song.id)}" aria-controls="nd-${esc(e.song.id)}">
+          <span class="pos">${e.pos}</span><span class="mv ${moveCls(e.move)}">${esc(e.move === '=' ? '–' : e.move)}</span>
+          <span class="ti"><b>${esc(e.song.title)}</b><span>${esc(e.song.artist)}</span></span>
+          <span class="st"><b>${e.spins.toLocaleString()}</b>${e.bullet ? '<span class="badge bul">●</span>' : ''} spins<br>${e.stations}/${E.STATIONS.length} stations · PK ${e.pk} <span class="chev">▾</span></span>
+        </button>
+        ${open.has(e.song.id) ? detail(e) : ''}
+      </li>`).join('')}</ol><p class="legend">Tap a song to see every station playing it: spins this week, the change from last week, and its position on that station's Top 30 ("rot." means in rotation but outside the Top 30).
       ${E.AUTO.chartDate ? `Rotations last refreshed from the Spotify US weekly chart dated ${esc(fmtDate(new Date(E.AUTO.chartDate + 'T12:00:00Z')))}.` : 'Rotations come from your US New Music Chart, the seed song list and your playlists until the first weekly Spotify update runs.'}</p>`;
+    pane.querySelectorAll('[data-net-toggle]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.netToggle; open.has(id) ? open.delete(id) : open.add(id);
+      const keep = pane.scrollTop; renderNetwork(); $('#tabpane').scrollTop = keep;
+    }));
+    pane.querySelectorAll('[data-play-net]').forEach(b => b.addEventListener('click', () => {
+      const song = E.SONGS.get(b.dataset.playNet); if (!song) return;
+      const top = rows.find(r => r.song.id === song.id)?.by[0]?.st;
+      request(state.station || top || E.STATIONS[0], song, 'pick');
+    }));
     pane.querySelectorAll('[data-wk]').forEach(b => b.addEventListener('click', () => { state.week += +b.dataset.wk; renderNetwork(); }));
   }
 
