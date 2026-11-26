@@ -27,7 +27,7 @@ for (const f of files) {
     const relMs = Date.parse(rel.length === 4 ? rel + '-06-01' : rel.length === 7 ? rel + '-15' : rel);
     seen.set(id, {
       id, title: r['Track Name'], artist: artists.join(', '), artists, rel, relMs, year: +rel.slice(0, 4),
-      x: r['Explicit'] === 'true', pop: +r['Popularity'] || 0,
+      x: r['Explicit'] === 'true', pop: +r['Popularity'] || 0, ms: +r['Track Duration (ms)'] || 0,
     });
   }
 }
@@ -78,5 +78,8 @@ const gold = {};
 for (const [sid, list] of Object.entries(goldPick)) gold[sid] = list.sort((a, b) => b[0] - a[0]).slice(0, 45).map(x => x[1]);
 
 const explicit = all.filter(s => s.x).map(s => s.id);
-writeJsGlobal('library.js', 'RADIO_LIBRARY', { built: asOf, files, currents, gold, explicit });
+// song lengths (ms) by id and by title|artist, so the broadcast schedule knows when each song ends
+const durations = Object.fromEntries(all.filter(s => s.ms).map(s => [s.id, s.ms]));
+const durationsByKey = Object.fromEntries(all.filter(s => s.ms).map(s => [songKey(s.title, s.artist), s.ms]));
+writeJsGlobal('library.js', 'RADIO_LIBRARY', { built: asOf, files, currents, gold, explicit, durations, durationsByKey });
 console.log(`library.js: ${currents.length} recent songs, ${Object.values(gold).reduce((a, b) => a + b.length, 0)} throwback slots across ${D.STATIONS.length} stations (from ${all.length} playlist tracks, week of ${asOf})`);

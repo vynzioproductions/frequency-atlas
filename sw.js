@@ -1,6 +1,6 @@
 // Caches the app shell so it opens fast and works as an installed app.
-const CACHE = 'freq-atlas-v5';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'engine.js', 'data.js', 'library.js', 'auto.js', 'composite.js', 'dj.js', 'builder.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const CACHE = 'freq-atlas-v7';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'engine.js', 'data.js', 'library.js', 'auto.js', 'composite.js', 'dj.js', 'broadcast.js', 'durations.js', 'builder.js', 'sync.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener('fetch', e => {

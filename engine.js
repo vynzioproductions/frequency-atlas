@@ -296,7 +296,7 @@
   }
 
   // Rotation buckets used by the live stream
-  function rotation(st, k) {
+  function rotation(st, k, opts = {}) {
     const { chart } = rawChart(st, k);
     const ranked = spinsAt(st, k);
     const inChart = new Set(chart.map(c => c.song.id));
@@ -308,13 +308,19 @@
     const deep = ranked.filter(r => !inChart.has(r.song.id) && r.song.kind === 'current' && r.age > 4 && r.age <= 26).slice(0, 40).map(r => r.song);
     const plants = st.plants.map(p => SONGS.get(p[0]));
     const gold = goldFor(st);
-    const mine = custom.songs.filter(s => s.station === st.id && !(st.clean && s.x));
+    const mine = custom.songs.filter(s => s.station === st.id && !(st.clean && s.x) && (!opts.broadcast || s.pub));
     mine.forEach(s => {
       if (s.kind === 'gold') gold.push(s);
       else if (s.kind === 'plant') plants.push(s);
       else adds.push(s);
     });
     return { power, currents, medium, adds, deep, recurrents, plants, gold };
+  }
+
+  // ----- song lengths (for the shared broadcast schedule) -----
+  const DUR = root.RADIO_DURATIONS || {};
+  function durationOf(song) {
+    return DUR[song.id] || L.durations?.[song.id] || L.durationsByKey?.[songKey(song.title, song.artist)] || 210000;
   }
 
   // ----- stations built in the app -----
@@ -347,7 +353,7 @@
   }
 
   root.RadioEngine = {
-    addStation, removeStation, previewChart,
+    addStation, removeStation, previewChart, durationOf, songKey,
     STATIONS, byId, SONGS, GOLD, goldFor, custom, AUTO: A, LIBRARY: L, COMPOSITE: C, compositeChart, CHART_SIZE, NETWORK_SIZE,
     weekIndexFor, weekEnding, countdown, networkChart, plantReport, rotation, stationSpins, hash,
     nowWeek: () => Math.max(0, weekIndexFor(Date.now())),

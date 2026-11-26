@@ -5,7 +5,7 @@
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const store = {
     get(k, d) { try { const v = localStorage.getItem('fa:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-    set(k, v) { try { localStorage.setItem('fa:' + k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+    set(k, v) { try { if (v == null) localStorage.removeItem('fa:' + k); else localStorage.setItem('fa:' + k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
   };
   const fmtDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 
@@ -36,7 +36,7 @@
   map.on('zoomend', syncLabels); syncLabels();
 
   // stations you built in the app (saved in this browser)
-  store.get('stations', []).forEach(st => { try { E.addStation(st); } catch { /* skip a broken saved station */ } });
+  store.get('stations', []).forEach(st => { try { E.addStation({ ...st, freq: String(st.freq).includes('FM') ? st.freq : st.freq + ' FM' }); } catch { /* skip a broken saved station */ } });
 
   const markers = {};
   function addMarker(st, i = Object.keys(markers).length) {
@@ -54,12 +54,13 @@
   function renderDial() {
     $('#dialList').innerHTML = E.STATIONS.map(st => `<li><button data-st="${st.id}" style="--c:${st.color}"><span class="sw"></span>
       <span><span class="nm">${esc(st.name)}${st.custom ? ' <span class="badge plant">YOURS</span>' : ''}</span><br><span class="ct">${esc(st.city)}, ${esc(st.state)}</span></span><span class="fq">${esc(st.call)}</span></button></li>`).join('')
-      + `<li><button data-build="1" style="--c:#eef1f7"><span class="sw"></span><span><span class="nm">Build a station</span><br><span class="ct">Put your own station on the map</span></span><span class="fq">＋</span></button></li>`;
+      + `<li><button data-build="1" style="--c:#eef1f7"><span class="sw"></span><span><span class="nm">Build a station</span><br><span class="ct">Put your own station on the map</span></span><span class="fq">＋</span></button></li>`
+      + `<li><button data-sync="1" style="--c:#2ee6c8"><span class="sw"></span><span><span class="nm">Sync across devices</span><br><span class="ct">Your stations on every browser</span></span><span class="fq">⇄</span></button></li>`;
   }
   renderDial();
   $('#dialList').addEventListener('click', e => {
-    const b = e.target.closest('[data-st],[data-build]'); if (!b) return;
-    toggleDial(false); go(b.dataset.build ? 'build' : 'station-' + b.dataset.st);
+    const b = e.target.closest('[data-st],[data-build],[data-sync]'); if (!b) return;
+    toggleDial(false); go(b.dataset.build ? 'build' : b.dataset.sync ? 'sync' : 'station-' + b.dataset.st);
   });
   function toggleDial(open) { const d = $('#dial'); d.hidden = !open; $('#btnStations').setAttribute('aria-expanded', String(open)); }
   $('#btnStations').addEventListener('click', () => toggleDial($('#dial').hidden));
@@ -91,6 +92,8 @@
     } else if (h === 'network') {
       if (state.view !== 'network') state.week = NOW;
       state.view = 'network'; renderNetwork();
+    } else if (h === 'sync' || h.startsWith('import-')) {
+      state.view = h; // handled by sync.js
     } else { state.view = null; $('#panel').hidden = true; }
     if (!h.startsWith('build')) window.RadioBuilder?.close();
   }
@@ -106,8 +109,8 @@
           <div><h2>${esc(st.name)}</h2><div class="sub"><b>${esc(st.slogan)}</b> · ${esc(st.city)}, ${esc(st.state)}</div></div>
         </div>
         <div class="listen">
-          <button class="btn btn-main" id="btnListen">${onAir ? '⏭ Next song' : '▶ Listen live'}</button>
-          <span class="live"><i></i>On air: ${esc(DJ.onAir(st).name)} · ${esc(DJ.localTime(st).text)}</span>
+          <button class="btn btn-main" id="btnListen">${onAir && state.mode === 'live' ? '● Live now' : '▶ Listen live'}</button>
+          <span class="live"><i></i>${esc(st.call)}-FM · ${esc(st.freq)} · ${esc(DJ.localTime(st).text)}</span>
         </div>
         <div class="tabs" role="tablist">
           ${[['listen', 'Up next'], ['chart', 'Top 30'], ['plants', 'Plants'], ['about', 'Station']].map(([k, l]) =>
@@ -115,7 +118,7 @@
         </div>
       </div>
       <div class="tabpane" id="tabpane"></div>`;
-    $('#btnListen').addEventListener('click', () => { if (state.station?.id !== st.id) tuneIn(st); else skip(); renderStation(st); });
+    $('#btnListen').addEventListener('click', () => { if (state.station?.id !== st.id || state.mode !== 'live') tuneIn(st); renderStation(st); });
     $('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { state.tab = b.dataset.tab; renderStation(st); } });
     const pane = $('#tabpane');
     if (state.tab === 'listen') paneListen(st, pane);
@@ -128,11 +131,14 @@
 
   function paneListen(st, pane) {
     const rot = E.rotation(st, NOW);
-    const ahead = state.station?.id === st.id ? peekAhead(5) : [];
+    const up = window.RadioLive.upcoming(st, 6);
+    const now = Date.now();
     const block = (title, list, cat) => list.length ? `<div class="sec"><h3>${title}</h3><ul class="gold">${list.map(s =>
       `<li data-play="${esc(s.id)}" data-cat="${cat}"><div><b>${esc(s.title)}</b><span>${esc(s.artist)}</span></div><span class="yr">${s.year ? esc(s.year) : '▶'}</span></li>`).join('')}</ul></div>` : '';
     pane.innerHTML = `
-      ${ahead.length ? block('Coming up on ' + esc(st.name), ahead.map(a => a.song), 'pick') : `<p class="lead">Press <b>Listen live</b> to start the stream. Songs play through Spotify; log in to Spotify in this browser to hear full tracks instead of 30-second previews.</p>`}
+      <div class="sec"><h3>On the air ${esc(st.name)} · everyone hears the same songs</h3><ul class="gold sched">${up.map((it, i) =>
+        `<li data-play="${esc(it.song.id)}" data-cat="pick"><div><b>${esc(it.song.title)}</b><span>${esc(it.song.artist)}${CAT[it.cat] ? ' · ' + esc(CAT[it.cat].toLowerCase()) : ''}</span></div><span class="yr">${it.start <= now ? '<span class="onair">NOW</span>' : esc(fmtClock(st, it.start))}</span></li>`).join('')}</ul></div>
+      <p class="lead" style="font-size:13px">Tap any song to request it. It plays just for you, then you rejoin the live broadcast. Log in to Spotify in this browser for full songs.</p>
       ${block('Brand new this week', rot.adds.slice(0, 8), 'adds')}
       ${block('Power rotation', rot.power, 'power')}`;
     bindPlay(pane, st);
@@ -187,7 +193,6 @@
     pane.innerHTML = `
       ${st.custom ? `<div class="sec mineactions"><button class="btn btn-main" id="stEdit">Edit station</button><button class="btn btn-ghost" id="stCopy">Copy station code</button><button class="btn btn-ghost" id="stDel">Delete</button></div>` : ''}
       <div class="sec"><h3>About the station</h3><p>${esc(st.about || 'A station you built.')}</p></div>
-      <div class="sec"><h3>On air</h3><ul class="shows">${st.shows.map(([d, n]) => `<li><span>${esc(d)}</span>${esc(n)}</li>`).join('')}</ul></div>
       <div class="sec"><h3>Throwbacks in rotation (${gold.length})</h3><ul class="gold">${gold.slice(0, 25).map(g => `<li data-play="${esc(g.id)}" data-cat="gold"><div><b>${esc(g.title)}</b><span>${esc(g.artist)}</span></div><span class="yr">${g.year}</span></li>`).join('')}</ul></div>
       <div class="sec import"><h3>Add songs to this station</h3>
         <textarea id="impText" placeholder="Paste Spotify track links, one per line"></textarea>
@@ -201,7 +206,7 @@
       $('#stEdit').addEventListener('click', () => go('build-' + st.id));
       $('#stCopy').addEventListener('click', () => {
         const code = JSON.stringify(window.RadioBuilder.exportable(st));
-        navigator.clipboard?.writeText(code).then(() => toast('Station code copied. Paste it to Claude to make it permanent.'), () => toast('Copy failed'));
+        navigator.clipboard?.writeText(code).then(() => toast('Station code copied'), () => toast('Copy failed'));
       });
       $('#stDel').addEventListener('click', ev => {
         const b = ev.currentTarget;
@@ -244,8 +249,7 @@
       if (ev.target.closest('[data-rm]')) return;
       const id = el.dataset.play;
       const song = E.SONGS.get(id) || [...E.GOLD.values()].find(g => g.id === id) || E.custom.songs.find(s => s.id === id) || { id, title: '', artist: '' };
-      if (state.station?.id !== st.id) tuneIn(st, false);
-      playSong(song, el.dataset.cat || 'pick');
+      request(st, song, el.dataset.cat || 'pick');
     }));
   }
 
@@ -275,8 +279,7 @@
         <p class="legend">Your US New Music Chart. Its scores drive how hot each song runs on every station. Tap a song to hear it on the station you last tuned to.</p>`;
       pane.querySelectorAll('[data-play]').forEach(el => el.addEventListener('click', () => {
         const song = E.SONGS.get(el.dataset.play); if (!song) return;
-        if (!state.station) tuneIn(E.byId.tucson, false);
-        playSong(song, 'pick');
+        request(state.station || E.byId.tucson, song, 'pick');
       }));
       return;
     }
@@ -291,134 +294,129 @@
     pane.querySelectorAll('[data-wk]').forEach(b => b.addEventListener('click', () => { state.week += +b.dataset.wk; renderNetwork(); }));
   }
 
-  // ---------------- live stream ----------------
+  // ---------------- playback ----------------
+  // LIVE: the shared schedule (broadcast.js), so everyone hears the same thing.
+  // ON DEMAND: requests and countdown shows, just for you; then it rejoins live.
+  const DJ = window.RadioDJ, LIVE = () => window.RadioLive;
   const CLOCK = ['power', 'currents', 'adds', 'power', 'gold', 'deep', 'currents', 'plants', 'power', 'medium', 'adds', 'currents', 'gold', 'power', 'deep', 'recurrents'];
-  function pickFrom(rot, cat, avoid) {
-    const list = rot[cat] || [];
-    const fresh = list.filter(s => !avoid.has(s.id));
-    const pool = fresh.length ? fresh : list;
-    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
-  }
-  function nextFromClock(simulate) {
-    const rot = E.rotation(state.station, NOW);
-    let clock = simulate ? simulate.clock : state.clock;
-    const avoid = new Set((simulate ? simulate.recent : state.recent).slice(-24));
-    for (let tries = 0; tries < CLOCK.length; tries++) {
-      const cat = CLOCK[clock % CLOCK.length]; clock++;
-      const song = pickFrom(rot, cat, avoid);
-      if (song) {
-        if (simulate) { simulate.clock = clock; simulate.recent.push(song.id); } else state.clock = clock;
-        return { song, cat };
-      }
-    }
-    return null;
-  }
-  // Peek at what's coming without changing the real queue: we precompute and store it.
-  function peekAhead(n) {
-    while (state.queue.length < n) {
-      const sim = { clock: state.clock, recent: [...state.recent, ...state.queue.map(q => q.song.id)] };
-      const nx = nextFromClock(sim); if (!nx) break;
-      state.clock = sim.clock; state.queue.push(nx);
-    }
-    return state.queue.slice(0, n);
-  }
-  state.queue = [];
-
-  const DJ = window.RadioDJ;
-  state.cd = []; // countdown-show queue
+  state.cd = []; state.mode = 'live'; state.queue = [];
+  let liveTimer = null, previewWarned = false;
+  const stopTimer = () => { clearTimeout(liveTimer); liveTimer = null; };
+  const hush = () => { try { speechSynthesis.cancel(); } catch { /* no speech */ } };
+  const fmtClock = (st, ms) => new Intl.DateTimeFormat('en-US', { timeZone: st.tz || DJ.TZ?.[st.id] || 'America/Phoenix', hour: 'numeric', minute: '2-digit' }).format(new Date(ms));
 
   function tuneIn(st, autoplay = true) {
-    state.station = st; state.clock = Math.floor(Math.random() * CLOCK.length); state.queue = []; state.recent = []; state.cd = []; state.last = null;
+    state.station = st; state.cd = []; state.inCountdown = false;
     const pl = $('#player'); pl.hidden = false; pl.style.setProperty('--c', st.color);
-    updatePlayerHead();
     DJ.unlock();
-    if (autoplay) {
-      const show = DJ.onAir(st);
-      peekAhead(1);
-      const nx = state.queue[0];
-      talk([`You're tuned to ${st.name}, ${st.call} ${st.city}. This is ${show.name}.`, nx ? DJ.frontSell(st, nx.song, nx.cat) : ''], true).then(() => skip(true));
-    }
+    if (autoplay) goLive(); else { state.mode = 'demand'; updatePlayerHead(); }
   }
   function updatePlayerHead() {
     const st = state.station; if (!st) return;
-    $('#plStation').textContent = state.cd.length || state.inCountdown ? `${DJ.chartName(st)} countdown · ${st.name}` : `${st.name} · ${DJ.onAir(st).name}`;
+    const live = state.mode === 'live';
+    $('#plStation').innerHTML = `${live ? '<span class="onair">LIVE</span>' : ''}${esc(state.inCountdown ? DJ.chartName(st) + ' countdown · ' + st.name : st.name + ' · ' + st.city)}`;
+    $('#plSkip').hidden = live;
+    $('#plLive').hidden = live;
+  }
+  function refreshListen() { if (state.view === state.station?.id && state.tab === 'listen') renderStation(state.station); }
+
+  // ---- live ----
+  function goLive() {
+    const st = state.station; if (!st) return;
+    state.mode = 'live'; state.cd = []; state.inCountdown = false; stopTimer(); hush();
+    updatePlayerHead();
+    const { item, offset, next } = LIVE().at(st);
+    if (item) playItem(item, offset); else idle();
+    scheduleNext(next);
+    refreshListen();
+  }
+  function scheduleNext(next) {
+    stopTimer(); if (!next) return;
+    liveTimer = setTimeout(() => {
+      if (state.mode !== 'live') return;
+      const { item, offset, next: after } = LIVE().at(state.station);
+      if (item) playItem(item, offset); else idle();
+      scheduleNext(after);
+      refreshListen();
+    }, Math.max(200, next.start - Date.now()));
+  }
+  function idle() { $('#plCat').textContent = ''; $('#plTitle').textContent = 'Stay tuned…'; }
+  async function playItem(item, offset) {
+    hush();
+    if (item.type === 'song') return playSong(item.song, item.cat, offset);
+    // a station ID; skip it if we tuned in at its very end
+    if (item.end - Date.now() < 2500) return;
+    state.controller?.pause?.();
+    await imaging(item.text, offset > 1500 ? 'short' : item.kind);
   }
 
-  // speak a talk break (optionally after the station's sonic logo)
-  async function talk(lines, withSting) {
-    const st = state.station; if (!st || !state.dj) return;
-    const text = lines.filter(Boolean).join(' ');
-    $('#plCat').textContent = 'ON AIR'; $('#plTitle').textContent = DJ.onAir(st).name;
-    if (withSting) await DJ.sting(st);
+  // play a station ID: sonic logo, then the imaging voice
+  async function imaging(text, kind = 'full') {
+    const st = state.station; if (!st) return;
+    $('#plCat').textContent = 'ID'; $('#plTitle').textContent = `${st.call}-FM · ${st.freq}`;
+    if (!state.dj) return;
+    await DJ.sting(st, kind);
     if (text) await DJ.say(st, text);
   }
 
-  // pick and play the next song; quiet = no talk (manual skip)
-  function skip(quiet) {
-    let nx;
-    if (state.cd.length) { nx = state.cd.shift(); state.inCountdown = true; }
-    else { state.inCountdown = false; peekAhead(1); nx = state.queue.shift(); }
-    if (!nx) return;
-    playSong(nx.song, nx.cat);
-    updatePlayerHead();
-    if (state.view === state.station?.id && state.tab === 'listen') renderStation(state.station);
-  }
-
-  function playSong(song, cat) {
-    if (state.playing) state.last = state.playing;
+  function playSong(song, cat, offsetMs = 0) {
     state.playing = song; state.playingCat = cat; state.ending = false;
-    state.recent.push(song.id); if (state.recent.length > 60) state.recent.shift();
     $('#plCat').textContent = CAT[cat] || (String(cat).startsWith('#') ? cat : ''); $('#plTitle').textContent = song.title ? `${song.title} — ${song.artist}` : 'Loading…';
+    state.pendingSeek = offsetMs > 2500 ? offsetMs / 1000 : 0;
     const uri = 'spotify:track:' + song.id;
     if (state.controller) { state.controller.loadUri(uri); state.controller.play(); }
     else { state.pendingUri = uri; }
   }
 
-  let sinceTalk = 0, sinceSting = 0;
-  async function onEnded() {
-    if (state.ending) return; state.ending = true;
-    const st = state.station; if (!st) return;
-    const prev = state.playing;
-    if (state.cd.length) {                       // countdown show: every song gets an intro
-      const nx = state.cd[0];
-      await talk([DJ.countdownIntro(st, nx.row, false)], nx.row.pos % 10 === 0);
-      return skip(true);
-    }
-    if (state.inCountdown) {                      // the countdown just finished
-      state.inCountdown = false;
-      await talk([`That's the ${DJ.chartName(st)} for this week. Thanks for counting down with us on ${st.name}.`], true);
-      return skip(true);
-    }
-    sinceTalk++; sinceSting++;
-    peekAhead(1);
-    const nx = state.queue[0];
-    if (state.dj && sinceTalk >= 2) {
-      sinceTalk = 0;
-      const sting = sinceSting >= 4; if (sting) sinceSting = 0;
-      const lines = sting ? [DJ.stationId(st), nx ? DJ.frontSell(st, nx.song, nx.cat) : '']
-        : [DJ.backAnnounce(st, prev), nx ? DJ.frontSell(st, nx.song, nx.cat) : ''];
-      await talk(lines, sting);
-    } else if (state.dj && nx && (nx.cat === 'plants' || nx.cat === 'adds') && Math.random() < 0.6) {
-      await talk([DJ.frontSell(st, nx.song, nx.cat)], false);   // always flag new music and plants
-    }
-    skip(true);
+  // ---- on demand (requests and countdowns) ----
+  function request(st, song, cat) {
+    if (state.station?.id !== st.id) tuneIn(st, false);
+    state.mode = 'demand'; stopTimer(); state.cd = []; state.inCountdown = false;
+    updatePlayerHead();
+    playSong(song, cat || 'pick');
   }
-
   async function startCountdown(st) {
     if (state.station?.id !== st.id) tuneIn(st, false);
     DJ.unlock();
+    state.mode = 'demand'; stopTimer();
     const rows = E.countdown(st, NOW).slice().reverse();
     state.cd = rows.map(row => ({ song: row.song, cat: '#' + row.pos, row }));
     state.inCountdown = true; updatePlayerHead();
-    const first = state.cd[0];
-    await talk([DJ.countdownIntro(st, first.row, true)], true);
-    skip(true);
+    await imaging(DJ.countdownOpen(st), 'full');
+    await imaging(DJ.countdownDrop(state.cd[0].row), 'drop');
+    nextDemand();
+  }
+  function nextDemand() {
+    const nx = state.cd.shift();
+    if (!nx) { goLive(); return; }
+    playSong(nx.song, nx.cat);
+    updatePlayerHead();
   }
 
-  $('#plSkip').addEventListener('click', () => { try { speechSynthesis.cancel(); } catch { /* no speech */ } skip(true); });
-  const vBtn = $('#plVoice'); vBtn.textContent = 'DJ'; vBtn.title = 'DJ talk breaks and station IDs';
+  async function onEnded() {
+    if (state.ending) return; state.ending = true;
+    const st = state.station; if (!st) return;
+    if (state.mode === 'live') {
+      // the song ran short of its slot: fill with a quick ID; the schedule picks up on time
+      const { item } = LIVE().at(st);
+      if (item && item.type === 'song' && item.end - Date.now() > 4000) await imaging(DJ.positioner(st), 'short');
+      return;
+    }
+    if (state.cd.length) {
+      const nx = state.cd[0];
+      await imaging(DJ.countdownDrop(nx.row), nx.row.pos === 1 || nx.row.pos % 10 === 0 ? 'full' : 'drop');
+      return nextDemand();
+    }
+    if (state.inCountdown) { state.inCountdown = false; await imaging(DJ.countdownClose(st), 'full'); }
+    else await imaging(DJ.positioner(st), 'short');
+    goLive();   // requests and countdowns hand back to the live broadcast
+  }
+
+  $('#plSkip').addEventListener('click', () => { hush(); state.cd.length ? nextDemand() : goLive(); });
+  $('#plLive').addEventListener('click', () => { hush(); goLive(); toast('Back to the live broadcast'); });
+  const vBtn = $('#plVoice'); vBtn.textContent = 'ID'; vBtn.title = 'Station IDs between songs';
   vBtn.setAttribute('aria-pressed', String(state.dj));
-  vBtn.addEventListener('click', () => { state.dj = !state.dj; store.set('dj', state.dj); vBtn.setAttribute('aria-pressed', String(state.dj)); toast(state.dj ? 'DJs on' : 'DJs off, music only'); });
+  vBtn.addEventListener('click', () => { state.dj = !state.dj; store.set('dj', state.dj); vBtn.setAttribute('aria-pressed', String(state.dj)); toast(state.dj ? 'Station IDs on' : 'Station IDs off, music only'); });
 
   window.onSpotifyIframeApiReady = (IFrameAPI) => {
     const el = document.getElementById('spotifyEmbed');
@@ -428,6 +426,11 @@
       controller.addListener('playback_update', (e) => {
         const { isPaused, position, duration } = e.data || {};
         if (!duration) return;
+        if (state.pendingSeek && !isPaused) {          // joining live mid-song: jump to where everyone else is
+          const to = state.pendingSeek; state.pendingSeek = 0;
+          if (duration > 31000) controller.seek(Math.min(to, duration / 1000 - 3));
+        }
+        if (duration <= 31000 && !previewWarned) { previewWarned = true; toast('Log in to Spotify in this browser to hear full songs in sync with everyone'); }
         if (!isPaused) wasPlaying = true;
         const nearEnd = position >= duration - 1200;
         const resetAfterEnd = isPaused && wasPlaying && position === 0 && lastPos >= duration - 3000;

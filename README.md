@@ -35,8 +35,21 @@ Every Saturday morning (Arizona time), GitHub runs `scripts/update-chart.mjs` fo
 - Songs from **2010 or later** that are at least 18 months old become **throwbacks**, shared out to the two stations whose sound suits each one best (each station's `home` artists get first dibs). Nothing older than 2010 plays; change `GOLD_MIN_YEAR` in `data.js` to move that line.
 - To refresh, export the playlists again (exportify.net), upload the CSVs into `playlists/` with the same names, and the update runs automatically.
 
+## Live: everyone hears the same thing
+Every station runs a shared schedule. Each hour's playlist is worked out from just the station and the hour, so every device comes up with the same songs at the same times. Tuning in mid-song jumps to the same spot everyone else is hearing.
+- A legal ID plays at the top of each hour. A song still playing then gets cut off, like a real station's hard top-of-hour break.
+- The schedule needs each song's length. Lengths come from your playlist exports, and the weekly update looks up any missing ones (`scripts/durations.mjs` → `durations.js`). Songs without a known length get 3:30 slots; if one ends early, a quick ID fills the gap.
+- **Requests** (tap any song) and **countdown shows** play just for you, then hand back to the live broadcast. The red **LIVE** button rejoins any time.
+- Listeners need to be logged in to Spotify in the browser to stay in sync. Logged-out listeners only get 30-second previews.
+
+## Stations you build, on every device
+Stations built in the app are saved to `stations.json` in the repo, and every device that opens the site loads that file.
+- **Connect once per device you build from:** Stations → **Sync across devices**, then enter a GitHub fine-grained token that has *Contents: Read and write* on this repo only. After that, every build, edit or delete publishes automatically, and other devices see it about a minute later.
+- **Devices that only listen** don't need a token.
+- **No token?** **Copy sync link** in the same panel copies your stations into another browser in one step.
+
 ## Playback
-Songs play through Spotify's embedded player. Log in to Spotify in the same browser to hear full songs; when you're not logged in, Spotify plays 30-second previews. The stream follows a radio clock: power hits, currents, new adds, deep cuts, throwbacks, plants and recurrents, with spoken station IDs every few songs (toggle with the **ID** button). Wasatch 101.9 skips every song marked explicit on Spotify. Songs that only come from the weekly chart don't carry that flag, so check the log if one slips through.
+Songs play through Spotify's embedded player. Log in to Spotify in the same browser to hear full songs; when you're not logged in, Spotify plays 30-second previews. The stream follows a radio clock: power hits, currents, new adds, deep cuts, throwbacks, plants and recurrents, with station IDs between songs (toggle with the **ID** button). There are no hosts. Each station has one imaging voice and a sonic logo built from its frequency. It plays a legal ID at the top of each hour, positioners and sweepers every few songs, and "new music", "discovery" and "throwback" drops before those songs. The countdown show uses position drops ("Number 12"). Wasatch 101.9 skips every song marked explicit on Spotify. Songs that only come from the weekly chart don't carry that flag, so check the log if one slips through.
 
 ## Editing stations (`data.js`)
 - Station fields: `tags` (how much the station leans into pop, dance, rnb, indie, alt, latin, country, kpop, rap; 1 = neutral), `nb` (new-music boost), `home` (signature artists for throwbacks), `clean` (skip explicit songs), `plants`.

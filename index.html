@@ -46,7 +46,8 @@
   </div>
   <div class="player-embed"><div id="spotifyEmbed"></div></div>
   <div class="player-ctrls">
-    <button class="ctrl" id="plSkip" title="Next song" aria-label="Next song">⏭</button>
+    <button class="ctrl" id="plSkip" title="Next song" aria-label="Next song" hidden>⏭</button>
+    <button class="ctrl live" id="plLive" title="Back to the live broadcast" hidden>LIVE</button>
     <button class="ctrl" id="plVoice" title="Station IDs between songs" aria-pressed="true">ID</button>
   </div>
 </footer>
@@ -58,10 +59,13 @@
 <script src="library.js"></script>
 <script src="auto.js"></script>
 <script src="composite.js"></script>
+<script src="durations.js"></script>
 <script src="engine.js"></script>
 <script src="dj.js"></script>
+<script src="broadcast.js"></script>
 <script src="app.js"></script>
 <script src="builder.js"></script>
+<script src="sync.js"></script>
 <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
 </body>
 </html>

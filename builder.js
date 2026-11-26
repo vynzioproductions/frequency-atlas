@@ -128,9 +128,6 @@
         <h3 class="bh">Live preview: this week's Top 10</h3>
         <ol class="preview" id="bPreview"></ol>
 
-        <h3 class="bh">On air</h3>
-        <div class="grid2">${d.shows.map(([slot, name], i) => `<label class="fld"><span>${esc(slot)}</span><input data-show="${i}" maxlength="40" placeholder="${esc(defaultShow(slot))}" value="${esc(name)}"></label>`).join('')}</div>
-
         <h3 class="bh">Throwback artists</h3>
         <label class="fld"><span>Signature artists, comma separated (they get first dibs on throwback slots)</span><input id="bHome" value="${esc(d.home.join(', '))}" placeholder="Imagine Dragons, Noah Kahan"></label>
 
@@ -172,7 +169,6 @@
       body.querySelectorAll('[data-tag]').forEach(r => { r.value = d.tags[r.dataset.tag]; r.nextElementSibling.textContent = (+r.value).toFixed(2); });
       refresh();
     }));
-    body.querySelectorAll('[data-show]').forEach(inp => inp.addEventListener('input', () => { d.shows[+inp.dataset.show][1] = inp.value; }));
     $('#bPlants').addEventListener('change', readPlants);
     $('#bSave').addEventListener('click', save);
     $('#bCancel').addEventListener('click', () => A.go(editing ? 'station-' + editing.id : ''));
@@ -216,7 +212,6 @@
     }
     const rows = E.previewChart({ id: d.id || d.newId, tags: d.tags, nb: d.nb, clean: d.clean, plants: [] }, 10);
     $('#bPreview').innerHTML = rows.map((r, i) => `<li><span class="pp">${i + 1}</span><span class="ti"><b>${esc(r.song.title)}</b><span>${esc(r.song.artist)}</span></span><span class="ps">${r.spins}</span></li>`).join('');
-    document.querySelectorAll('[data-show]').forEach(inp => { inp.placeholder = defaultShow(d.shows[+inp.dataset.show][0]); });
     if (pin) setPin(d.lat, d.lon);
   }
 
@@ -243,10 +238,10 @@
     const st = {
       id, custom: true, name: d.name.trim(), slogan: d.slogan.trim() || `${d.city}'s New Music`, city: d.city.trim(), state: (d.state || '').trim().toUpperCase(),
       lat: d.lat, lon: d.lon, call: d.call, freq: d.freq + ' FM', color: d.color, tags: { ...d.tags }, nb: d.nb, clean: d.clean, home: d.home,
-      about: d.about.trim(), shows: d.shows.map(([slot, name]) => [slot, name.trim() || defaultShow(slot)]), plants: d.plants, gold: [],
+      about: d.about.trim(), shows: [], plants: d.plants, gold: [],
       tz: tzFor(d.lat, d.lon, d.state), launched: new Date().getFullYear(),
     };
-    E.addStation(st);
+    E.addStation(st); window.RadioLive?.clearCache(id);
     const saved = A.store.get('stations', []).filter(s => s.id !== id);
     saved.push(exportable(st)); A.store.set('stations', saved);
     close();
