@@ -36,7 +36,7 @@
 
   function mkSong(row, kind, src, only) {
     const [id, title, artist, tags, score, weeks, trend, asOf, x] = row;
-    return { id, title: cleanTitle(title), artist, tags: String(tags).split(' '), score, weeks, trend, kind, src, only: only || null,
+    return { id, title: cleanTitle(title), artist, tags: String(tags).split(' '), score, weeks, trend, kind, src, only: only ? new Set([only]) : null,
       asOf: asOf || D.DATA_WEEK, x: !!x || EXPLICIT.has(id) };
   }
   const SONGS = new Map();
@@ -79,10 +79,38 @@
 
   const GOLD = new Map();
   Object.entries(D.GOLD).forEach(([key, [id, title, artist, year]]) => GOLD.set(key, { key, id, title, artist, year, kind: 'gold', x: EXPLICIT.has(id) }));
+  // every throwback the library knows about, for stations built in the app
+  const GOLD_POOL = (() => {
+    const seen = new Map();
+    Object.values(L.gold || {}).flat().forEach(([id, title, artist, year, x]) => { if (!seen.has(id)) seen.set(id, { id, title: cleanTitle(title), artist, year, kind: 'gold', x: !!x }); });
+    GOLD.forEach(g => { if (!seen.has(g.id)) seen.set(g.id, g); });
+    return [...seen.values()];
+  })();
+  const goldCache = new Map();
   function goldFor(st) {
+    if (st.custom) {
+      const sig = JSON.stringify([st.tags, st.home, st.clean]);
+      const hit = goldCache.get(st.id); if (hit && hit.sig === sig) return hit.list;
+      const homes = new Set((st.home || []).map(a => a.toLowerCase()));
+      const list = GOLD_POOL.filter(g => !(st.clean && g.x)).map(g => {
+        const tags = artistTags(g.artist);
+        const aff = tags.reduce((t, x) => t + (st.tags[x] ?? 1), 0) / tags.length;
+        const home = String(g.artist).split(/,|&| feat\./i).some(a => homes.has(a.trim().toLowerCase()));
+        return [aff * (home ? 4 : 1) * (0.55 + 0.9 * hash(st.id + g.id)), g];
+      }).filter(x => x[0] > 0.2).sort((a, b) => b[0] - a[0]).slice(0, 45).map(x => x[1]);
+      goldCache.set(st.id, { sig, list });
+      return list;
+    }
     const hand = st.gold.map(g => GOLD.get(g)).filter(Boolean);
     const lib = (L.gold?.[st.id] || []).map(([id, title, artist, year, x]) => ({ id, title: cleanTitle(title), artist, year, kind: 'gold', x: !!x }));
     return [...hand, ...lib].filter(g => !(st.clean && g.x));
+  }
+  // genre guess for a throwback: borrow the tags of any current song by the same lead artist
+  const ARTIST_TAGS = new Map();
+  function artistTags(artist) {
+    const a = String(artist).split(/,|&| feat\./i)[0].trim().toLowerCase();
+    if (!ARTIST_TAGS.size) SONGS.forEach(s => { const k = String(s.artist).split(/,|&| feat\./i)[0].trim().toLowerCase(); if (!ARTIST_TAGS.has(k)) ARTIST_TAGS.set(k, s.tags); });
+    return ARTIST_TAGS.get(a) || ['pop'];
   }
 
   // Shape of a song's run: rises from its debut to a peak, then decays. Positions are relative to the
@@ -123,7 +151,7 @@
   const byId = Object.fromEntries(STATIONS.map(s => [s.id, s]));
 
   function affinity(st, song) {
-    if (song.only) return song.only === st.id ? 1 : 0;
+    if (song.only) return song.only.has(st.id) ? 1 : 0;
     if (st.clean && song.x) return 0;
     const w = song.tags.map(t => st.tags[t] ?? (t === 'rap' ? 0.15 : 1));
     return Math.pow(w.reduce((a, b) => a + b, 0) / w.length, 1.6); // exaggerate taste so stations sound different
@@ -289,7 +317,37 @@
     return { power, currents, medium, adds, deep, recurrents, plants, gold };
   }
 
+  // ----- stations built in the app -----
+  function clearStation(id) {
+    for (const m of [memo, spinMemo]) for (const k of [...m.keys()]) if (k.startsWith(id + ':')) m.delete(k);
+    goldCache.delete(id);
+  }
+  function addStation(st) {
+    st.custom = true; st.gold = st.gold || []; st.plants = st.plants || []; st.home = st.home || [];
+    removeStation(st.id, true);
+    STATIONS.push(st); byId[st.id] = st;
+    st.plants.forEach(r => {
+      const have = SONGS.get(r[0]);
+      if (have?.only) have.only.add(st.id);            // already a plant somewhere else: share it
+      else if (!have) { const s = mkSong(r, 'plant', 'seed', st.id); SONGS.set(s.id, s); }
+    });
+    clearStation(st.id);
+    return st;
+  }
+  function removeStation(id, keepPlants) {
+    const i = STATIONS.findIndex(s => s.id === id);
+    if (i < 0 || !STATIONS[i].custom) return;
+    STATIONS[i].plants.forEach(r => { const s = SONGS.get(r[0]); if (s?.only) { s.only.delete(id); if (!s.only.size) SONGS.delete(r[0]); } });
+    STATIONS.splice(i, 1); delete byId[id]; clearStation(id);
+  }
+  // quick Top-N for a station that isn't saved yet (builder preview)
+  function previewChart(st, n = 10) {
+    const tmp = { ...st, id: st.id || 'preview' };
+    return stationSpins(tmp, Math.max(0, weekIndexFor(Date.now()))).filter(r => r.song.kind === 'current').slice(0, n);
+  }
+
   root.RadioEngine = {
+    addStation, removeStation, previewChart,
     STATIONS, byId, SONGS, GOLD, goldFor, custom, AUTO: A, LIBRARY: L, COMPOSITE: C, compositeChart, CHART_SIZE, NETWORK_SIZE,
     weekIndexFor, weekEnding, countdown, networkChart, plantReport, rotation, stationSpins, hash,
     nowWeek: () => Math.max(0, weekIndexFor(Date.now())),

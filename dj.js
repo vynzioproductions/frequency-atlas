@@ -11,7 +11,7 @@
   const ord = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 
   function localTime(st) {
-    const tz = TZ[st.id] || 'America/Phoenix';
+    const tz = st.tz || TZ[st.id] || 'America/Phoenix';
     const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', weekday: 'long', hour12: true })
       .formatToParts(new Date()).map(p => [p.type, p.value]));
     const h24 = +new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(new Date()) % 24;

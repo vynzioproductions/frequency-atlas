@@ -35,19 +35,32 @@
   const syncLabels = () => document.getElementById('map').classList.toggle('far', map.getZoom() < 5);
   map.on('zoomend', syncLabels); syncLabels();
 
+  // stations you built in the app (saved in this browser)
+  store.get('stations', []).forEach(st => { try { E.addStation(st); } catch { /* skip a broken saved station */ } });
+
   const markers = {};
-  E.STATIONS.forEach((st, i) => {
-    const html = `<div class="stn${['tucson', 'nyc', 'vegas'].includes(st.id) ? ' below' : ''}" style="--c:${st.color};--d:${(i * 0.33).toFixed(2)}s"><span class="stn-ring"></span><span class="stn-dot"></span>
+  function addMarker(st, i = Object.keys(markers).length) {
+    if (markers[st.id]) map.removeLayer(markers[st.id]);
+    const html = `<div class="stn${['tucson', 'nyc', 'vegas'].includes(st.id) ? ' below' : ''}${st.custom ? ' mine' : ''}" style="--c:${st.color};--d:${(i * 0.33 % 2.6).toFixed(2)}s"><span class="stn-ring"></span><span class="stn-dot"></span>
       <span class="stn-label"><b>${esc(st.name)}</b><span>${esc(st.city)}</span></span></div>`;
     const icon = L.divIcon({ html, className: '', iconSize: [0, 0] });
     markers[st.id] = L.marker([st.lat, st.lon], { icon, title: `${st.name} — ${st.city}`, keyboard: true }).addTo(map)
       .on('click', () => go('station-' + st.id));
-  });
+  }
+  function removeMarker(id) { if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; } }
+  E.STATIONS.forEach((st, i) => addMarker(st, i));
 
   // ---------------- station list ----------------
-  $('#dialList').innerHTML = E.STATIONS.map(st => `<li><button data-st="${st.id}" style="--c:${st.color}"><span class="sw"></span>
-    <span><span class="nm">${esc(st.name)}</span><br><span class="ct">${esc(st.city)}, ${esc(st.state)}</span></span><span class="fq">${esc(st.call)}</span></button></li>`).join('');
-  $('#dialList').addEventListener('click', e => { const b = e.target.closest('[data-st]'); if (b) { toggleDial(false); go('station-' + b.dataset.st); } });
+  function renderDial() {
+    $('#dialList').innerHTML = E.STATIONS.map(st => `<li><button data-st="${st.id}" style="--c:${st.color}"><span class="sw"></span>
+      <span><span class="nm">${esc(st.name)}${st.custom ? ' <span class="badge plant">YOURS</span>' : ''}</span><br><span class="ct">${esc(st.city)}, ${esc(st.state)}</span></span><span class="fq">${esc(st.call)}</span></button></li>`).join('')
+      + `<li><button data-build="1" style="--c:#eef1f7"><span class="sw"></span><span><span class="nm">Build a station</span><br><span class="ct">Put your own station on the map</span></span><span class="fq">＋</span></button></li>`;
+  }
+  renderDial();
+  $('#dialList').addEventListener('click', e => {
+    const b = e.target.closest('[data-st],[data-build]'); if (!b) return;
+    toggleDial(false); go(b.dataset.build ? 'build' : 'station-' + b.dataset.st);
+  });
   function toggleDial(open) { const d = $('#dial'); d.hidden = !open; $('#btnStations').setAttribute('aria-expanded', String(open)); }
   $('#btnStations').addEventListener('click', () => toggleDial($('#dial').hidden));
   $('#btnNetwork').addEventListener('click', () => go('network'));
@@ -73,10 +86,13 @@
       const pt = map.project([st.lat, st.lon], z).subtract(wide ? [Math.min(440, window.innerWidth) / 2, 0] : [0, -window.innerHeight * 0.28]);
       map.flyTo(map.unproject(pt, z), z, { duration: 0.8 });
       renderStation(st);
+    } else if (h === 'build' || h.startsWith('build-')) {
+      state.view = h; window.RadioBuilder?.open(h === 'build' ? null : E.byId[h.slice(6)]);
     } else if (h === 'network') {
       if (state.view !== 'network') state.week = NOW;
       state.view = 'network'; renderNetwork();
     } else { state.view = null; $('#panel').hidden = true; }
+    if (!h.startsWith('build')) window.RadioBuilder?.close();
   }
 
   // ---------------- station panel ----------------
@@ -169,7 +185,8 @@
     const gold = E.goldFor(st);
     const mine = E.custom.songs.filter(s => s.station === st.id);
     pane.innerHTML = `
-      <div class="sec"><h3>About the station</h3><p>${esc(st.about)}</p></div>
+      ${st.custom ? `<div class="sec mineactions"><button class="btn btn-main" id="stEdit">Edit station</button><button class="btn btn-ghost" id="stCopy">Copy station code</button><button class="btn btn-ghost" id="stDel">Delete</button></div>` : ''}
+      <div class="sec"><h3>About the station</h3><p>${esc(st.about || 'A station you built.')}</p></div>
       <div class="sec"><h3>On air</h3><ul class="shows">${st.shows.map(([d, n]) => `<li><span>${esc(d)}</span>${esc(n)}</li>`).join('')}</ul></div>
       <div class="sec"><h3>Throwbacks in rotation (${gold.length})</h3><ul class="gold">${gold.slice(0, 25).map(g => `<li data-play="${esc(g.id)}" data-cat="gold"><div><b>${esc(g.title)}</b><span>${esc(g.artist)}</span></div><span class="yr">${g.year}</span></li>`).join('')}</ul></div>
       <div class="sec import"><h3>Add songs to this station</h3>
@@ -180,6 +197,18 @@
       </div>
       ${mine.length ? `<div class="sec"><h3>Your additions (${mine.length})</h3><ul class="gold mine">${mine.map(s => `<li data-play="${esc(s.id)}" data-cat="${s.kind === 'adds' ? 'adds' : s.kind === 'plant' ? 'plants' : 'gold'}"><div><b>${esc(s.title)}</b><span>${esc(s.artist)}</span></div><span class="yr">${esc(CAT[s.kind === 'plant' ? 'plants' : s.kind])}</span><button class="rm" data-rm="${esc(s.id)}">Remove</button></li>`).join('')}</ul></div>` : ''}`;
     $('#impGo').addEventListener('click', () => importSongs(st));
+    if (st.custom) {
+      $('#stEdit').addEventListener('click', () => go('build-' + st.id));
+      $('#stCopy').addEventListener('click', () => {
+        const code = JSON.stringify(window.RadioBuilder.exportable(st));
+        navigator.clipboard?.writeText(code).then(() => toast('Station code copied. Paste it to Claude to make it permanent.'), () => toast('Copy failed'));
+      });
+      $('#stDel').addEventListener('click', ev => {
+        const b = ev.currentTarget;
+        if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Tap again to delete'; return; }
+        window.RadioBuilder.remove(st.id);
+      });
+    }
     pane.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', ev => {
       ev.stopPropagation();
       E.custom.songs = E.custom.songs.filter(s => !(s.station === st.id && s.id === b.dataset.rm));
@@ -416,6 +445,8 @@
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+  window.RadioApp = { map, go, toast, esc, store, addMarker, removeMarker, renderDial, markers, nowWeek: NOW,
+    stopIf: (id) => { if (state.station?.id === id) { state.station = null; $('#player').hidden = true; } } };
   route();
   if (!location.hash) setTimeout(() => toast('Tap a glowing dot to tune in'), 600);
 }
