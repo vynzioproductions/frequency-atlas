@@ -125,12 +125,16 @@ async function main() {
       if (isHoliday(s.title)) continue;
       const key = songKey(ent(s.title), ent(s.artist));
       const cur = songs.get(key) || { key, title: ent(s.title), artist: ent(s.artist), pts: 0, srcs: {} };
+      if (cur.srcs[name]) continue;                       // same song listed twice in one source
       cur.pts += (WEIGHTS[name] / total) * 100 * (n + 1 - s.rank) / n;
       cur.srcs[name] = s.rank;
       if (s.id && !cur.id) cur.id = s.id;
       if (s.release && !cur.release) cur.release = s.release.slice(0, 10);
       if (s.days) cur.days = s.days;
-      if (name === 'spotify') { cur.title = ent(s.title); cur.artist = ent(s.artist); }   // Spotify's spelling matches the app
+      // display names: the fullest artist credit any source gives, and the title without "(from …)" / "(w/ …)" tags
+      const artist = ent(s.artist), title = ent(s.title).replace(/\s*[([](from|w\/|with|feat\.?|ft\.?)\s[^)\]]*[)\]]/gi, '').trim();
+      if (artist.split(/,|&/).length > cur.artist.split(/,|&/).length || (name === 'hothits' && artist.length >= cur.artist.length)) cur.artist = artist;
+      if (name === 'spotify' || name === 'hothits' || title.length < cur.title.length) cur.title = title;
       songs.set(key, cur);
     }
   }
