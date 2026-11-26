@@ -41,7 +41,7 @@
   const markers = {};
   function addMarker(st, i = Object.keys(markers).length) {
     if (markers[st.id]) map.removeLayer(markers[st.id]);
-    const html = `<div class="stn${['tucson', 'nyc', 'vegas'].includes(st.id) ? ' below' : ''}${st.custom ? ' mine' : ''}" style="--c:${st.color};--d:${(i * 0.33 % 2.6).toFixed(2)}s"><span class="stn-ring"></span><span class="stn-dot"></span>
+    const html = `<div class="stn${['tucson', 'nyc', 'vegas'].includes(st.id) || st.label === 'below' ? ' below' : ''}${st.custom ? ' mine' : ''}" style="--c:${st.color};--d:${(i * 0.33 % 2.6).toFixed(2)}s"><span class="stn-ring"></span><span class="stn-dot"></span>
       <span class="stn-label"><b>${esc(st.name)}</b><span>${esc(st.city)}</span></span></div>`;
     const icon = L.divIcon({ html, className: '', iconSize: [0, 0] });
     markers[st.id] = L.marker([st.lat, st.lon], { icon, title: `${st.name} — ${st.city}`, keyboard: true }).addTo(map)
