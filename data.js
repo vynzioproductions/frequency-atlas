@@ -491,6 +491,186 @@
         ['54DfkmXS60tPDzCAXWtlPM', 'Ignorance Is Bliss', 'Kira Lise', 'pop', 44, 6, 'up'],
       ],
     },
+    {
+      id: 'kansascity', city: "Kansas City", state: 'MO', lat: 39.0997, lon: -94.5786, tz: 'America/Chicago',
+      call: 'KFTN', freq: '102.7 FM', name: "Fountain 102.7", slogan: "Kansas City's Feel-Good Station", color: '#4da3ff',
+      about: "Fountain 102.7 is Kansas City's home for a feel-good mix of new pop and the best songs of the last fifteen years. Its throwback hours belong to OneRepublic, Imagine Dragons and Maroon 5. Fewer new songs, more favorites.",
+      tags: {pop: 1.25, dance: 0.78, rnb: 0.97, indie: 1.16, alt: 1.19, latin: 0.51, country: 0.94, kpop: 0.47, rap: 0.05}, nb: 0.24,
+      home: ['OneRepublic', 'Imagine Dragons', 'Maroon 5'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'stlouis', city: "St. Louis", state: 'MO', lat: 38.627, lon: -90.1994, tz: 'America/Chicago',
+      call: 'KGWY', freq: '102.3 FM', name: "Gateway 102.3", slogan: "St. Louis's R&B and Hip-Hop", color: '#ff3d8b',
+      about: "Gateway 102.3 broadcasts from St. Louis with R&B, hip-hop and dance-floor pop. Its throwback hours belong to Rihanna, Khalid and Post Malone.",
+      tags: {pop: 0.91, dance: 1.44, rnb: 1.45, indie: 0.58, alt: 0.46, latin: 1.18, country: 0.31, kpop: 0.92, rap: 1.15}, nb: 0.36,
+      home: ['Rihanna', 'Khalid', 'Post Malone'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'charlotte', city: "Charlotte", state: 'NC', lat: 35.2271, lon: -80.8431, tz: 'America/New_York',
+      call: 'WQCY', freq: '99.5 FM', name: "Queen City 99.5", slogan: "Charlotte's #1 for New Music", color: '#c46bff',
+      about: "From Charlotte, Queen City 99.5 plays the biggest new pop songs alongside the ones about to be big. When it digs into the archive, expect Ariana Grande, Dua Lipa and Selena Gomez.",
+      tags: {pop: 1.11, dance: 1.16, rnb: 1.08, indie: 0.87, alt: 0.87, latin: 0.84, country: 0.89, kpop: 1.05, rap: 0.27}, nb: 0.33,
+      home: ['Ariana Grande', 'Dua Lipa', 'Selena Gomez'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'raleigh', city: "Raleigh", state: 'NC', lat: 35.7796, lon: -78.6382, tz: 'America/New_York',
+      call: 'WOAK', freq: '104.3 FM', name: "Oak 104.3", slogan: "Discover Something New", color: '#b8f05c',
+      about: "Oak 104.3 broadcasts from Raleigh with indie pop and singer-songwriters you won't hear anywhere else. Its throwback hours belong to Maggie Rogers, Lorde and Vance Joy.",
+      tags: {pop: 0.73, dance: 0.74, rnb: 1.03, indie: 1.92, alt: 1.15, latin: 0.54, country: 0.94, kpop: 0.5, rap: 0.09}, nb: 0.48,
+      home: ['Maggie Rogers', 'Lorde', 'Vance Joy'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'columbus', city: "Columbus", state: 'OH', lat: 39.9612, lon: -82.9988, tz: 'America/New_York',
+      call: 'WPLS', freq: '107.3 FM', name: "Pulse 107.3", slogan: "Turn It Up, Columbus", color: '#ff4fd8',
+      about: "Pulse 107.3 broadcasts from Columbus with dance pop, house-leaning hits and club crossovers. Its throwback hours belong to Calvin Harris, Marshmello and Clean Bandit.",
+      tags: {pop: 1.05, dance: 1.87, rnb: 1.15, indie: 0.67, alt: 0.73, latin: 1.12, country: 0.31, kpop: 1.12, rap: 0.28}, nb: 0.38,
+      home: ['Calvin Harris', 'Marshmello', 'Clean Bandit'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'indianapolis', city: "Indianapolis", state: 'IN', lat: 39.7684, lon: -86.1581, tz: 'America/Indiana/Indianapolis',
+      call: 'WXRD', freq: '96.5 FM', name: "Crossroads 96.5", slogan: "The Best Variety of New Music", color: '#ffd23d',
+      about: "From Indianapolis, Crossroads 96.5 plays a feel-good mix of new pop and the best songs of the last fifteen years. Its throwback hours belong to P!nk, Coldplay and Shawn Mendes.",
+      tags: {pop: 1.25, dance: 0.88, rnb: 0.93, indie: 1.16, alt: 1.22, latin: 0.5, country: 0.91, kpop: 0.44, rap: 0.05}, nb: 0.27,
+      home: ['P!nk', 'Coldplay', 'Shawn Mendes'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'milwaukee', city: "Milwaukee", state: 'WI', lat: 43.0389, lon: -87.9065, tz: 'America/Chicago',
+      call: 'WLKS', freq: '99.3 FM', name: "Lakeshore 99.3", slogan: "Today's Hits, Milwaukee's Hits", color: '#5ce1e6',
+      about: "Lakeshore 99.3 broadcasts from Milwaukee with the biggest new pop songs alongside the ones about to be big. When it digs into the archive, expect Katy Perry, 5 Seconds of Summer and Charlie Puth.",
+      tags: {pop: 1.07, dance: 1.09, rnb: 0.88, indie: 0.86, alt: 0.97, latin: 0.85, country: 0.86, kpop: 0.93, rap: 0.33}, nb: 0.37,
+      home: ['Katy Perry', '5 Seconds of Summer', 'Charlie Puth'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'pittsburgh', city: "Pittsburgh", state: 'PA', lat: 40.4406, lon: -79.9959, tz: 'America/New_York',
+      call: 'WSTL', freq: '98.9 FM', name: "Steel 98.9", slogan: "All the Hits, All the Time", color: '#ffd23d',
+      about: "Steel 98.9 is Pittsburgh's home for the biggest new pop songs alongside the ones about to be big. Its throwback hours belong to Kesha, Macklemore and Halsey.",
+      tags: {pop: 1.32, dance: 1.08, rnb: 1, indie: 0.81, alt: 0.86, latin: 0.95, country: 0.73, kpop: 1, rap: 0.31}, nb: 0.35,
+      home: ['Kesha', 'Macklemore', 'Halsey'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'tampa', city: "Tampa", state: 'FL', lat: 27.9506, lon: -82.4572, tz: 'America/New_York',
+      call: 'WGLF', freq: '99.7 FM', name: "Gulf 99.7", slogan: "Pop, Latin Style", color: '#ff8a3d',
+      about: "From Tampa, Gulf 99.7 plays Latin pop and reggaeton mixed with the biggest pop hits. Its throwback hours belong to Shakira, Pitbull and KAROL G.",
+      tags: {pop: 0.91, dance: 1.25, rnb: 0.95, indie: 0.55, alt: 0.41, latin: 2.22, country: 0.27, kpop: 0.85, rap: 0.42}, nb: 0.4,
+      home: ['Shakira', 'Pitbull', 'KAROL G'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'sacramento', city: "Sacramento", state: 'CA', lat: 38.5816, lon: -121.4944, tz: 'America/Los_Angeles',
+      call: 'KVIB', freq: '107.7 FM', name: "Vibe 107.7", slogan: "Sacramento's Rhythm", color: '#c46bff',
+      about: "Vibe 107.7 is Sacramento's home for R&B, hip-hop and dance-floor pop. Its throwback hours belong to Doja Cat, The Weeknd and Teddy Swims.",
+      tags: {pop: 0.91, dance: 1.28, rnb: 1.48, indie: 0.6, alt: 0.53, latin: 1.32, country: 0.29, kpop: 1.01, rap: 1.13}, nb: 0.38,
+      home: ['Doja Cat', 'The Weeknd', 'Teddy Swims'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'okc', city: "Oklahoma City", state: 'OK', lat: 35.4676, lon: -97.5164, tz: 'America/Chicago',
+      call: 'KPRA', freq: '92.7 FM', name: "Prairie 92.7", slogan: "New Music First", color: '#ff5a5a',
+      about: "Prairie 92.7 broadcasts from Oklahoma City with the biggest new pop songs alongside the ones about to be big. When it digs into the archive, expect Benson Boone, Demi Lovato and Ed Sheeran.",
+      tags: {pop: 1.26, dance: 1.07, rnb: 1.01, indie: 0.99, alt: 0.84, latin: 0.99, country: 0.76, kpop: 1.09, rap: 0.3}, nb: 0.38,
+      home: ['Benson Boone', 'Demi Lovato', 'Ed Sheeran'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'omaha', city: "Omaha", state: 'NE', lat: 41.2565, lon: -95.9345, tz: 'America/Chicago',
+      call: 'KPLT', freq: '103.9 FM', name: "Platte 103.9", slogan: "Omaha's Independent Sound", color: '#2ee6c8',
+      about: "Platte 103.9 broadcasts from Omaha with indie pop and singer-songwriters you won't hear anywhere else. Throwbacks lean on Hozier, Of Monsters and Men and Lord Huron.",
+      tags: {pop: 0.86, dance: 0.63, rnb: 1, indie: 1.92, alt: 1.34, latin: 0.45, country: 0.92, kpop: 0.56, rap: 0.1}, nb: 0.48,
+      home: ['Hozier', 'Of Monsters and Men', 'Lord Huron'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'anchorage', city: "Anchorage", state: 'AK', lat: 61.2181, lon: -149.9003, tz: 'America/Anchorage',
+      call: 'KNLT', freq: '104.3 FM', name: "Northern Lights 104.3", slogan: "Alaska's Feel-Good Station", color: '#5ce1e6',
+      about: "From Anchorage, Northern Lights 104.3 plays a feel-good mix of new pop and the best songs of the last fifteen years. Throwbacks lean on Bastille, X Ambassadors and Alex Warren.",
+      tags: {pop: 1.14, dance: 0.86, rnb: 0.83, indie: 1.32, alt: 0.97, latin: 0.52, country: 0.86, kpop: 0.5, rap: 0.05}, nb: 0.34,
+      home: ['Bastille', 'X Ambassadors', 'Alex Warren'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'louisville', city: "Louisville", state: 'KY', lat: 38.2527, lon: -85.7585, tz: 'America/Kentucky/Louisville',
+      call: 'WDBY', freq: '104.1 FM', name: "Derby 104.1", slogan: "Where Pop Meets Country", color: '#ff8a3d',
+      about: "From Louisville, Derby 104.1 plays country-leaning pop, where Nashville meets the Top 40. Throwbacks lean on Taylor Swift, Kacey Musgraves and Zach Bryan.",
+      tags: {pop: 0.99, dance: 0.47, rnb: 0.73, indie: 1.19, alt: 0.87, latin: 0.46, country: 2.37, kpop: 0.42, rap: 0.1}, nb: 0.4,
+      home: ['Taylor Swift', 'Kacey Musgraves', 'Zach Bryan'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'memphis', city: "Memphis", state: 'TN', lat: 35.1495, lon: -90.049, tz: 'America/Chicago',
+      call: 'WBLE', freq: '105.7 FM', name: "Beale 105.7", slogan: "Memphis's R&B and Hip-Hop", color: '#4da3ff',
+      about: "Beale 105.7 is Memphis's home for R&B, hip-hop and dance-floor pop. Throwbacks lean on Drake, Kendrick Lamar and Jason Derulo.",
+      tags: {pop: 0.86, dance: 1.29, rnb: 1.71, indie: 0.66, alt: 0.52, latin: 1.24, country: 0.3, kpop: 0.96, rap: 1.14}, nb: 0.41,
+      home: ['Drake', 'Kendrick Lamar', 'Jason Derulo'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'elpaso', city: "El Paso", state: 'TX', lat: 31.7619, lon: -106.485, tz: 'America/Denver',
+      call: 'KSNC', freq: '92.1 FM', name: "Sun City 92.1", slogan: "El Paso's Latin Hits", color: '#ffd23d',
+      about: "From El Paso, Sun City 92.1 plays Latin pop and reggaeton mixed with the biggest pop hits. Its throwback hours belong to KAROL G, Flo Rida and Ava Max.",
+      tags: {pop: 0.83, dance: 1.32, rnb: 0.96, indie: 0.56, alt: 0.42, latin: 2.15, country: 0.33, kpop: 0.81, rap: 0.36}, nb: 0.32,
+      home: ['KAROL G', 'Flo Rida', 'Ava Max'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'spokane', city: "Spokane", state: 'WA', lat: 47.6588, lon: -117.426, tz: 'America/Los_Angeles',
+      call: 'KLLC', freq: '92.1 FM', name: "Lilac 92.1", slogan: "Spokane's Independent Sound", color: '#c46bff',
+      about: "Lilac 92.1 broadcasts from Spokane with indie pop and singer-songwriters you won't hear anywhere else. When it digs into the archive, expect Noah Kahan, The Lumineers and Lizzy McAlpine. More new music per hour than any station around it.",
+      tags: {pop: 0.72, dance: 0.76, rnb: 0.94, indie: 1.98, alt: 1.26, latin: 0.5, country: 0.94, kpop: 0.52, rap: 0.1}, nb: 0.55,
+      home: ['Noah Kahan', 'The Lumineers', 'Lizzy McAlpine'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'charleston', city: "Charleston", state: 'SC', lat: 32.7765, lon: -79.9311, tz: 'America/New_York',
+      call: 'WLWC', freq: '101.7 FM', name: "Lowcountry 101.7", slogan: "Hits With Heart", color: '#2ee6c8',
+      about: "From Charleston, Lowcountry 101.7 plays country-leaning pop, where Nashville meets the Top 40. When it digs into the archive, expect Elle King, Josie Edwards and Mark Ambor.",
+      tags: {pop: 1.07, dance: 0.45, rnb: 0.69, indie: 0.98, alt: 0.88, latin: 0.56, country: 2.25, kpop: 0.36, rap: 0.09}, nb: 0.34,
+      home: ['Elle King', 'Josie Edwards', 'Mark Ambor'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'cleveland', city: "Cleveland", state: 'OH', lat: 41.4993, lon: -81.6944, tz: 'America/New_York',
+      call: 'WFCY', freq: '98.5 FM', name: "Forest City 98.5", slogan: "Cleveland's Alternative", color: '#b8f05c',
+      about: "Forest City 98.5 is Cleveland's home for alternative and left-of-center pop. When it digs into the archive, expect Twenty One Pilots, Fall Out Boy and Paramore.",
+      tags: {pop: 0.89, dance: 0.73, rnb: 0.81, indie: 1.35, alt: 1.51, latin: 0.46, country: 0.78, kpop: 0.65, rap: 0.1}, nb: 0.42,
+      home: ['Twenty One Pilots', 'Fall Out Boy', 'Paramore'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
+    {
+      id: 'richmond', city: "Richmond", state: 'VA', lat: 37.5407, lon: -77.436, tz: 'America/New_York',
+      call: 'WRCY', freq: '106.1 FM', name: "River City 106.1", slogan: "Pop Without Borders", color: '#ff3d8b',
+      about: "River City 106.1 is Richmond's home for K-pop and global pop next to the American hits. Throwbacks lean on LISA, IVE and Troye Sivan.",
+      tags: {pop: 0.9, dance: 1.09, rnb: 1, indie: 0.63, alt: 0.68, latin: 0.85, country: 0.3, kpop: 2.54, rap: 0.29}, nb: 0.41,
+      home: ['LISA', 'IVE', 'Troye Sivan'],
+      gold: [],
+      plants: [],   // the station's music director picks its plants
+    },
   ];
 
   root.RADIO_DATA = { CURRENTS, GOLD, STATIONS, DATA_WEEK: '2026-11-27', GOLD_MIN_YEAR: 2010 };

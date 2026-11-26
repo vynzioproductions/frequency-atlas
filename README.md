@@ -130,3 +130,19 @@ Type a description first ("indie and country, clean, lots of new music") to stee
 - New songs on the chart are added to the app right away, so stations can play them.
 
 To change the weights or rules, edit the top of `scripts/update-composite.mjs`.
+
+## Music directors (automatic adds and plants)
+
+Every station picks its own music each week, the same for everyone (`engine.js` → "music director"):
+- **Adds:** each week it adds up to 3 brand-new releases that fit its sound, on top of the new songs it picks up from the charts.
+- **Plants:** every two weeks it picks up to 2 lesser-known songs from the library (never artists who are already established or on the national chart). About a third get a big push and usually reach its Top 30; the rest get a few weeks of test spins.
+- Hand-picked plants in `data.js` still play while they're fresh; after that the director's picks take over.
+- More songs in your playlists = more for the directors to choose from.
+
+48 stations: the original 28 plus Kansas City, St. Louis, Charlotte, Raleigh, Columbus, Indianapolis, Milwaukee, Pittsburgh, Tampa, Sacramento, Oklahoma City, Omaha, Anchorage, Louisville, Memphis, El Paso, Spokane, Charleston, Cleveland and Richmond. Name tags that would overlap on the map are hidden until you zoom in.
+
+## Chart archive (back to January 2026)
+
+Every station's Top 30 can be browsed back to the week ending January 2, 2026. Songs that were big earlier in 2026 but have left today's charts come from `history.js` (Billboard Hot 100 top-ten singles of 2026, via Wikipedia), shaped from their real top-ten entry and peak dates. Their Spotify IDs are looked up by the daily job; until a song has one, it plays only through YouTube. To add more 2026 hits, add rows to `history.js`.
+
+Spin counts are simulated: the model turns real chart data (positions, dates, sources) into each station's spins, so they're realistic in shape but not real airplay.

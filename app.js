@@ -46,9 +46,26 @@
     const icon = L.divIcon({ html, className: '', iconSize: [0, 0] });
     markers[st.id] = L.marker([st.lat, st.lon], { icon, title: `${st.name} — ${st.city}`, keyboard: true }).addTo(map)
       .on('click', () => go('station-' + st.id));
+    window.RadioDeclutter?.();
   }
   function removeMarker(id) { if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; } }
   E.STATIONS.forEach((st, i) => addMarker(st, i));
+
+  // With many stations, hide a name tag when it would overlap one already shown (the dot stays clickable).
+  // Zoom in to see them all.
+  function declutter() {
+    const shown = [];
+    E.STATIONS.forEach(st => {
+      const el = markers[st.id]?.getElement()?.querySelector('.stn-label'); if (!el) return;
+      el.classList.remove('hid');
+      const r = el.getBoundingClientRect(); if (!r.width) return;
+      const pad = 3, hit = shown.some(o => r.left < o.right + pad && r.right > o.left - pad && r.top < o.bottom + pad && r.bottom > o.top - pad);
+      if (hit) el.classList.add('hid'); else shown.push(r);
+    });
+  }
+  let declT; const declLater = () => { clearTimeout(declT); declT = setTimeout(declutter, 60); };
+  map.on('zoomend moveend', declLater); window.addEventListener('resize', declLater); declLater();
+  window.RadioDeclutter = declLater;
 
   // ---------------- station list ----------------
   function renderDial() {
@@ -146,7 +163,7 @@
 
   function weekBar(k) {
     const end = E.weekEnding(k);
-    return `<div class="weekbar"><button class="navbtn" data-wk="-1" aria-label="Previous week" ${k <= NOW - 12 ? 'disabled' : ''}>‹</button>
+    return `<div class="weekbar"><button class="navbtn" data-wk="-1" aria-label="Previous week" ${k <= E.FIRST_WEEK ? 'disabled' : ''}>‹</button>
       <div class="wk">Week ending ${esc(fmtDate(end))}<small>${k === NOW ? 'This week' : (NOW - k) + ' week' + (NOW - k > 1 ? 's' : '') + ' ago'}</small></div>
       <button class="navbtn" data-wk="1" aria-label="Next week" ${k >= NOW ? 'disabled' : ''}>›</button></div>`;
   }
@@ -178,9 +195,9 @@
   function panePlants(st, pane) {
     const rep = E.plantReport(st, NOW);
     const mine = E.custom.songs.filter(s => s.station === st.id && s.kind === 'plant');
-    pane.innerHTML = `<p class="lead">Plants are discovery artists ${esc(st.name)} plays before anyone else. They start on light test spins, and the ones listeners react to break into the Top 30.</p>
+    pane.innerHTML = `<p class="lead">Plants are discovery artists ${esc(st.name)} plays before anyone else. Every two weeks the station's music director picks new ones from the library. Most get a few weeks of test spins; the ones it really believes in get pushed into the Top 30.</p>
       ${rep.map(r => `<div class="plant"><div><h4>${esc(r.song.title)}</h4><div class="ar">${esc(r.song.artist)}</div>
-        <div class="stat"><span class="status s-${r.status.split(' ')[0].toLowerCase()}">${esc(r.status)}${r.pos ? ' · #' + r.pos : ''}</span><span>${r.spins} spins this week</span><span>${r.weeksOn} wks in rotation</span></div></div>
+        <div class="stat"><span class="status s-${r.status.split(' ')[0].toLowerCase()}">${esc(r.status)}${r.pos ? ' · #' + r.pos : ''}</span><span>${r.spins} spins this week</span><span>${r.weeksOn} wks in rotation</span>${r.role === 'breakout' && !r.pos ? '<span>Big push</span>' : ''}</div></div>
         ${spark(r.trail, st.color)}
         <button class="btn btn-ghost play" data-play="${esc(r.song.id)}" data-cat="plants">▶ Play</button></div>`).join('')}
       ${mine.length ? `<div class="sec" style="margin-top:18px"><h3>Your plants</h3><ul class="gold">${mine.map(s => `<li data-play="${esc(s.id)}" data-cat="plants"><div><b>${esc(s.title)}</b><span>${esc(s.artist)}</span></div><span class="yr">▶</span></li>`).join('')}</ul></div>` : ''}`;
@@ -434,6 +451,8 @@
     embedPlay(song);
   }
   function embedPlay(song) {
+    // a 2026 hit whose Spotify ID hasn't been found yet: only YouTube can play it
+    if (String(song.id).startsWith('h_')) { toast(`“${song.title}” isn't ready to play yet. Skipping.`); setTimeout(() => { if (state.playing === song) onEnded(); }, 1500); return; }
     state.viaEmbed = true; $('#player').classList.add('pv'); window.RadioAccounts?.youtube?.hide();
     if (window.RadioAccounts?.active() && $('#plSrc')) $('#plSrc').textContent = '30-second preview · no full version found yet';
     const uri = 'spotify:track:' + song.id;

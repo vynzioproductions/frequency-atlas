@@ -167,7 +167,8 @@
     E.SONGS.forEach(s => { const a = first(s.artist).toLowerCase(); per.set(a, (per.get(a) || 0) + 1); });
     const homes = new Set((d.home || []).map(h => h.toLowerCase()));
     const cands = [...E.SONGS.values()].filter(s =>
-      (s.src === 'lib' || s.kind === 'plant') && s.src !== 'composite' && !onChart.has(s.id) && !(d.clean && s.x) && !homes.has(first(s.artist).toLowerCase()));
+      (s.src === 'lib' || s.kind === 'plant') && s.src !== 'composite' && !onChart.has(s.id) && !(d.clean && s.x) && !homes.has(first(s.artist).toLowerCase())
+      && !(E.isEstablished && E.isEstablished(s.artist)));
     const ranked = cands.map(s => {
       const lesserKnown = 1 / Math.min(4, per.get(first(s.artist).toLowerCase()) || 1);
       const quiet = s.kind === 'plant' ? 1 : 1.4 - Math.min(100, s.score || 50) / 100;

@@ -16,7 +16,7 @@ if (!KEY) { console.log('No YOUTUBE_API_KEY set; skipping YouTube lookups.'); pr
 
 // load the app's own data and engine to get the exact songs stations play
 const ctx = { console, Date, Math, JSON }; ctx.window = ctx; ctx.globalThis = ctx;
-for (const f of ['data.js', 'library.js', 'auto.js', 'composite.js', 'durations.js', 'engine.js']) {
+for (const f of ['data.js', 'library.js', 'auto.js', 'composite.js', 'durations.js', 'history.js', 'engine.js']) {
   const p = path.join(ROOT, f); if (fs.existsSync(p)) vm.runInNewContext(fs.readFileSync(p, 'utf8'), ctx, { filename: f });
 }
 const E = ctx.RadioEngine;

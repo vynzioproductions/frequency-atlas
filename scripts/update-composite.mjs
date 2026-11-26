@@ -190,7 +190,21 @@ async function main() {
   const k = Math.max(0, Math.ceil((now - seed) / (7 * DAY)));
   const weekEnding = new Date(seed + k * 7 * DAY).toISOString().slice(0, 10);
   const used = Object.keys(sources).map(n => ({ spotify: 'Spotify', apple: 'Apple Music', hothits: 'Hot Hits USA', shazam: 'Shazam' })[n]).join(', ');
-  const out = { title: 'US New Music Chart', weekEnding, updated: today, status: `Updated ${today} · ${used}`, rows, songs: extra };
+  // Spotify IDs for the 2026 hits in history.js (from kworb's all-time US list), so they play everywhere
+  let historyIds = {};
+  try { historyIds = loadBrowserData('composite.js').RADIO_COMPOSITE.historyIds || {}; } catch { /* first run */ }
+  try {
+    const H = loadBrowserData('history.js').RADIO_HISTORY;
+    const missing = H.rows.map(r => songKey(r[0], r[1])).filter(k => !historyIds[k]);
+    if (missing.length) {
+      const { rows: all } = parseKworb(await get('https://kworb.net/spotify/country/us_weekly_totals.html'));
+      const byK = new Map(all.map(r => [songKey(ent(r.title), ent(r.artist)), r.id]));
+      missing.forEach(k => { if (byK.get(k)) historyIds[k] = byK.get(k); });
+      console.log(`history: ${Object.keys(historyIds).length} of ${H.rows.length} 2026 hits have Spotify IDs`);
+    }
+  } catch (e) { console.log(`history IDs: skipped (${e.message})`); }
+
+  const out = { title: 'US New Music Chart', weekEnding, updated: today, status: `Updated ${today} · ${used}`, rows, songs: extra, historyIds };
   fs.writeFileSync(path.join(ROOT, 'composite.js'),
     `/* Daniel's US New Music Chart — rebuilt daily by scripts/update-composite.mjs.\n   rows: [pos, title, artist, lastPos, peak, weeks, score]; songs: new chart songs the app didn't know yet. */\nwindow.RADIO_COMPOSITE = ${JSON.stringify(out)};\n`);
   console.log(`composite.js: ${rows.length} songs (${extra.length} new to the app), #1 ${rows[0][1]} — ${rows[0][2]}. Sources: ${used}.`);
