@@ -62,3 +62,61 @@ You can also add songs in the app itself: open a station → **Station → Add s
 Spins come from each song's heat, the station's taste, a newness boost (NXT 97.9 leans hardest into new music, Harbor 92.5 the least) and a little week-to-week variation. The Top 30 ranks on this week's spins blended with last week's. Debuts enter no higher than #15, nothing climbs more than 10 spots in a week, and songs 20+ weeks old go recurrent once they fall below #20.
 
 Station names and call letters are fictional and not affiliated with any real station.
+
+## YouTube player (free full songs)
+
+Out of the box, songs play through YouTube for everyone, with no account needed. The site uses the official
+"Artist - Topic" audio upload when it can (same length as the album version, so the live schedule stays in
+sync), otherwise the official video. Songs without a match yet play the 30-second Spotify preview.
+YouTube requires the video to stay visible, so a small video window appears above the player, and playback
+stops when a phone locks. YouTube may show ads.
+
+### Setup (free, one time)
+1. Go to console.cloud.google.com (sign in with any Google account) → create a project.
+2. **APIs & Services → Library** → search **YouTube Data API v3** → **Enable**.
+3. **APIs & Services → Credentials → Create credentials → API key**. Copy it.
+4. In your GitHub repo: **Settings → Secrets and variables → Actions → New repository secret**.
+   Name: `YOUTUBE_API_KEY`, value: the key.
+5. Add the `.github/workflows/youtube.yml` file (like the weekly one). It runs every day and matches about
+   95 songs a day (the free limit), most-played songs first, and saves them to `yt.js`. The first full pass
+   takes about two weeks; after that it only looks up new songs. Run it any time from the **Actions** tab.
+
+Optional: make a second key restricted to your site (Credentials → the key → **Application restrictions →
+Websites** → `https://yourname.github.io/*`, and **API restrictions → YouTube Data API v3**) and put it in
+`config.js` → `youtubeApiKey`. Then a song the daily job hasn't reached gets looked up the first time someone
+plays it. It shares the same 100-searches-a-day limit.
+
+## Music sign-in (full songs)
+
+The **Sign in** button (♪ on phones) lets listeners play full songs instead of 30-second previews:
+
+- **Apple Music** — needs an Apple Music subscription. Works on phones and computers. Songs are matched to the Apple Music catalog automatically by title and artist; a song that isn't on Apple Music falls back to the preview.
+- **Spotify** — needs Spotify Premium. On computers it plays in the page. On phones it plays through the listener's own Spotify app (the site sends the song and the next ~14 scheduled songs), so it keeps going with the screen locked; station IDs only play while the site is open. Spotify allows a personal app **up to 5 listeners**, and you add each one's Spotify email in your app's **User Management** page. You (the app owner) need Premium too.
+
+### Setup (one time)
+
+**Apple Music**
+1. Join the Apple Developer Program ($99/year).
+2. developer.apple.com → Certificates, IDs & Profiles → **Identifiers** → add a **Media ID** (any name).
+3. **Keys** → **+** → name it, tick **Media Services (MusicKit, ShazamKit, Apple Music Feed)**, choose the Media ID → download the `AuthKey_XXXX.p8` file (you can only download it once — keep it private, never upload it).
+4. On your computer, in the project folder: `node scripts/apple-token.mjs path/to/AuthKey_XXXX.p8 TEAMID KEYID`
+5. Paste the token it prints into `config.js` → `appleDeveloperToken` and upload `config.js`. Make a new one before it expires (up to 6 months).
+
+**Spotify**
+1. developer.spotify.com/dashboard → **Create app**. Tick **Web API** and **Web Playback SDK**.
+2. Redirect URI: your site's address exactly, e.g. `https://yourname.github.io/frequency-atlas/` (the Sign in panel → Site setup shows the exact one).
+3. Copy the **Client ID** into `config.js` → `spotifyClientId` and upload it.
+4. **User Management**: add the name and Spotify email of each listener (max 5).
+
+Both values in `config.js` are meant to be public; they are not passwords. To try them before uploading, paste them into Sign in → Site setup (saved in that browser only).
+
+## Building stations
+
+Tap **＋ Build**, then click anywhere on the map. The autopilot (`builder-auto.js`) makes a complete station for that spot:
+- **Sound:** a format that fits the region and stands apart from stations nearby, with its own small twists.
+- **Identity:** name (from local and state words), call letters made from the name (K west of the Mississippi, W east), an open frequency, a color and a slogan.
+- **Throwback artists:** the three artists that fit its sound best.
+- **Plants:** five lesser-known songs from your playlists that fit its sound. The first is set up to break out.
+- **About:** written from all of the above.
+
+Type a description first ("indie and country, clean, lots of new music") to steer it. 🎲 rerolls the whole station, or just the name, throwback artists or plants. **Fine-tune everything** opens every setting.

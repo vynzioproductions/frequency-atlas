@@ -12,7 +12,7 @@
   const state = {
     station: null, tab: 'listen', week: E.nowWeek(), view: null,
     playing: null, clock: 0, recent: [], dj: store.get('dj', true),
-    controller: null, ending: false, started: false, walking: false, walkAt: 0, walkN: 0, previewOnly: false,
+    controller: null, ending: false, started: false,
   };
   const NOW = E.nowWeek();
   E.custom.songs = store.get('custom', []);
@@ -92,8 +92,8 @@
     } else if (h === 'network') {
       if (state.view !== 'network') state.week = NOW;
       state.view = 'network'; renderNetwork();
-    } else if (h === 'sync' || h.startsWith('import-') || h === 'account') {
-      state.view = h; // handled by sync.js / accounts.js
+    } else if (h === 'sync' || h.startsWith('import-')) {
+      state.view = h; // handled by sync.js
     } else { state.view = null; $('#panel').hidden = true; }
     if (!h.startsWith('build')) window.RadioBuilder?.close();
   }
@@ -138,7 +138,7 @@
     pane.innerHTML = `
       <div class="sec"><h3>On the air ${esc(st.name)} · everyone hears the same songs</h3><ul class="gold sched">${up.map((it, i) =>
         `<li data-play="${esc(it.song.id)}" data-cat="pick"><div><b>${esc(it.song.title)}</b><span>${esc(it.song.artist)}${CAT[it.cat] ? ' · ' + esc(CAT[it.cat].toLowerCase()) : ''}</span></div><span class="yr">${it.start <= now ? '<span class="onair">NOW</span>' : esc(fmtClock(st, it.start))}</span></li>`).join('')}</ul></div>
-      <p class="lead" style="font-size:13px">Tap any song to request it. It plays just for you, then you rejoin the live broadcast. <a href="#account">Sign in</a> for full songs.</p>
+      <p class="lead" style="font-size:13px">Tap any song to request it. It plays just for you, then you rejoin the live broadcast. Log in to Spotify in this browser for full songs.</p>
       ${block('Brand new this week', rot.adds.slice(0, 8), 'adds')}
       ${block('Power rotation', rot.power, 'power')}`;
     bindPlay(pane, st);
@@ -351,10 +351,10 @@
   // ---- live ----
   function goLive() {
     const st = state.station; if (!st) return;
-    state.mode = 'live'; state.cd = []; state.inCountdown = false; state.walking = false; state.walkAt = 0; stopTimer(); hush();
+    state.mode = 'live'; state.cd = []; state.inCountdown = false; stopTimer(); hush();
     updatePlayerHead();
     const { item, offset, next } = LIVE().at(st);
-    if (item) playItem(item, offset, next); else idle();
+    if (item) playItem(item, offset); else idle();
     scheduleNext(next);
     refreshListen();
   }
@@ -362,40 +362,27 @@
   // progress update says it's time, so a hidden tab keeps the broadcast moving
   function scheduleNext(next) { state.nextAt = next ? next.start : null; }
   function liveCheck(now = Date.now()) {
-    if (state.walking || state.mode !== 'live' || !state.station || !state.nextAt || now < state.nextAt - 250) return;
+    if (state.mode !== 'live' || !state.station || !state.nextAt || now < state.nextAt - 250) return;
     const { item, offset, next } = LIVE().at(state.station, Math.max(now, state.nextAt));
     scheduleNext(next);
-    if (window.RadioAccounts?.held) return;     // listener paused the full-song player: the schedule moves on silently
-    if (item) playItem(item, offset, next); else idle();
+    if (item) playItem(item, offset); else idle();
     if (!document.hidden) refreshListen();
   }
   window.RadioClock.onTick(liveCheck);
   // coming back to the tab: if anything was missed, jump to what's on now
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden || state.mode !== 'live' || !state.station || state.walking) return;
+    if (document.hidden || state.mode !== 'live' || !state.station) return;
     const { item } = LIVE().at(state.station);
     if (item && item.type === 'song' && item.song.id !== state.playing?.id) goLive(); else refreshListen();
   });
   function idle() { $('#plCat').textContent = ''; $('#plTitle').textContent = 'Stay tuned…'; }
-  async function playItem(item, offset, next) {
+  async function playItem(item, offset) {
     hush();
     if (item.type === 'song') return playSong(item.song, item.cat, offset);
     // a station ID; skip it if we tuned in at its very end
     if (item.end - Date.now() < 2500) return;
-    // The player never stops: the next song starts quietly under the ID, like a DJ talking over an intro.
-    // Browsers won't start new media in a background tab, but they keep media that's already playing going.
-    if (next?.type === 'song') startUnder(next.song, next.cat);
-    else { state.controller?.pause?.(); window.RadioAccounts?.active()?.pause(); }
+    state.controller?.pause?.();
     await imaging(item.text, offset > 1500 ? 'short' : item.kind);
-    if (state.under) unduck();
-  }
-  function startUnder(song, cat) {
-    state.under = song;
-    playSong(song, cat, 0, true);
-  }
-  function unduck() {
-    const s = state.under; state.under = null;
-    if (s && state.playing === s && !state.viaEmbed) window.RadioAccounts?.active()?.duck?.(false);
   }
 
   // play a station ID: sonic logo, then the imaging voice
@@ -407,51 +394,13 @@
     if (text) await DJ.say(st, text);
   }
 
-  function playSong(song, cat, offsetMs = 0, under = false) {
-    // already started under the station ID: just bring it up (and catch up if it's behind)
-    if (!under && state.playing === song && state.underStarted === song) {
-      state.underStarted = null; state.under = null; state.ending = false;
-      $('#plCat').textContent = CAT[cat] || ''; $('#plTitle').textContent = `${song.title} — ${song.artist}`;
-      const ext = window.RadioAccounts?.active();
-      if (!state.viaEmbed && ext) { ext.duck?.(false); ext.align?.(offsetMs / 1000); }
-      return;
-    }
-    // asked to start under an ID but it's already rolling (it started early): just duck it for the ID
-    if (under && state.playing === song && state.underStarted === song) { state.under = song; if (!state.viaEmbed) window.RadioAccounts?.active()?.duck?.(true); return; }
-    state.underStarted = under ? song : null;
+  function playSong(song, cat, offsetMs = 0) {
     state.playing = song; state.playingCat = cat; state.ending = false;
     $('#plCat').textContent = CAT[cat] || (String(cat).startsWith('#') ? cat : ''); $('#plTitle').textContent = song.title ? `${song.title} — ${song.artist}` : 'Loading…';
     state.pendingSeek = offsetMs > 2500 ? offsetMs / 1000 : 0;
-    // signed in with Apple Music or Spotify Premium: play the full song there
-    const ext = window.RadioAccounts?.active();
-    if (ext) {
-      const seek = state.pendingSeek; state.pendingSeek = 0;
-      state.controller?.pause?.(); state.viaEmbed = false; $('#player').classList.remove('pv'); window.RadioAccounts.badge?.();
-      ext.duck?.(!!under);
-      ext.play(song, seek).then(ok => { if (!ok && state.playing === song) embedPlay(song); else if (under && state.under === song) ext.duck?.(true); });
-      return;
-    }
-    embedPlay(song);
-  }
-  function embedPlay(song) {
-    state.viaEmbed = true; $('#player').classList.add('pv'); window.RadioAccounts?.youtube?.hide();
-    if (window.RadioAccounts?.active() && $('#plSrc')) $('#plSrc').textContent = '30-second preview · no full version found yet';
     const uri = 'spotify:track:' + song.id;
-    state.loadedAt = Date.now(); state.embedFresh = true;
     if (state.controller) { state.controller.loadUri(uri); state.controller.play(); }
     else { state.pendingUri = uri; }
-  }
-
-  // previews: walk through the station's schedule in order; snap back to what's on now if it gets far ahead
-  function previewNext() {
-    const st = state.station; if (!st) return;
-    let from = Math.max(Date.now(), state.walkAt || 0);
-    if (from - Date.now() > 20 * 60e3) from = Date.now();
-    const nx = LIVE().upcoming(st, 3, from).find(i => i.song.id !== state.playing?.id);
-    if (!nx) return goLive();
-    state.walking = true; state.walkAt = nx.end + 1;
-    playSong(nx.song, nx.cat, 0);
-    if (!document.hidden) refreshListen();
   }
 
   // ---- on demand (requests and countdowns) ----
@@ -483,19 +432,9 @@
     if (state.ending) return; state.ending = true;
     const st = state.station; if (!st) return;
     if (state.mode === 'live') {
-      // only a 30-second preview was available: keep the music going with the station's next songs
-      // instead of sitting silent until the full song's slot ends
-      if (state.viaEmbed && state.previewOnly) {
-        if (++state.walkN % 3 === 0) await imaging(DJ.positioner(st), 'short');
-        return previewNext();
-      }
-      // the song ran short of its slot: roll straight into what's next (under a quick ID) instead of going silent
-      const { item, next } = LIVE().at(st);
-      if (item && item.type === 'song' && item.end - Date.now() > 4000) {
-        let nx = next;
-        if (nx && nx.type !== 'song') nx = LIVE().upcoming(st, 2, nx.end).find(i => i.type === 'song');
-        if (nx) { startUnder(nx.song, nx.cat); await imaging(DJ.positioner(st), 'short'); if (state.under) unduck(); }
-      }
+      // the song ran short of its slot: fill with a quick ID; the schedule picks up on time
+      const { item } = LIVE().at(st);
+      if (item && item.type === 'song' && item.end - Date.now() > 4000) await imaging(DJ.positioner(st), 'short');
       return;
     }
     if (state.cd.length) {
@@ -522,16 +461,12 @@
       controller.addListener('playback_update', (e) => {
         const { isPaused, position, duration } = e.data || {};
         liveCheck();
-        if (!state.viaEmbed) return;   // a full-song player is in charge
-        // right after switching songs the embed can still report the old song's end: ignore it
-        if (state.embedFresh) { lastPos = 0; wasPlaying = false; if (Date.now() - state.loadedAt < 2500 || position > 4000) return; state.embedFresh = false; }
         if (!duration) return;
         if (state.pendingSeek && !isPaused) {          // joining live mid-song: jump to where everyone else is
           const to = state.pendingSeek; state.pendingSeek = 0;
           if (duration > 31000) controller.seek(Math.min(to, duration / 1000 - 3));
         }
-        state.previewOnly = duration <= 31000;
-        if (state.previewOnly && !previewWarned) { previewWarned = true; toast('Previews only. Tap Sign in for full songs.'); }
+        if (duration <= 31000 && !previewWarned) { previewWarned = true; toast('Log in to Spotify in this browser to hear full songs in sync with everyone'); }
         if (!isPaused) wasPlaying = true;
         const nearEnd = position >= duration - 1200;
         const resetAfterEnd = isPaused && wasPlaying && position === 0 && lastPos >= duration - 3000;
@@ -544,20 +479,12 @@
 
   // ---------------- misc ----------------
   let toastT;
-  function toast(msg, actionLabel, action) {
-    const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT);
-    if (actionLabel) { const b = document.createElement('button'); b.className = 'toast-act'; b.textContent = actionLabel; b.onclick = () => { t.hidden = true; action(); }; t.append(' ', b); }
-    toastT = setTimeout(() => { t.hidden = true; }, actionLabel ? 7000 : 3200);
-  }
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200); }
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   window.RadioApp = { map, go, toast, esc, store, addMarker, removeMarker, renderDial, markers, nowWeek: NOW,
-    onEnded, liveCheck, current: () => state.playing, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
-    // the next songs after the current one, so a phone's Spotify app can keep playing in the background
-    upNext: (n) => state.mode === 'live' && state.station ? LIVE().upcoming(state.station, n + 1).map(i => i.song.id) : state.cd.map(c => c.song.id).slice(0, n),
-    replay: () => { if (!state.station) return; if (state.mode === 'live') goLive(); else if (state.playing) playSong(state.playing, state.playingCat); },
     stopIf: (id) => { if (state.station?.id === id) { state.station = null; $('#player').hidden = true; } } };
   route();
   if (!location.hash) setTimeout(() => toast('Tap a glowing dot to tune in'), 600);

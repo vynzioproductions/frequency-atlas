@@ -1,4 +1,6 @@
-/* Station builder: place a station on the map, shape its sound, and watch its Top 10 change live. */
+/* Station builder: click the map and the autopilot (builder-auto.js) invents the whole station —
+   sound, name, call letters, slogan, about, throwback artists and plants. Everything can be re-rolled
+   or fine-tuned by hand before it goes on the air. */
 {
   const E = window.RadioEngine, A = window.RadioApp, DJ = window.RadioDJ;
   const $ = (s, el = document) => el.querySelector(s);
@@ -71,9 +73,8 @@
       const j = await r.json(), a = j.address || {};
       const city = a.city || a.town || a.village || a.hamlet || a.county || '';
       const code = (a['ISO3166-2-lvl4'] || '').split('-')[1] || '';
-      if (city && !$('#bCity').dataset.touched) { $('#bCity').value = city; draft.city = city; }
-      if (code && !$('#bState').dataset.touched) { $('#bState').value = code; draft.state = code; }
-      setPin(draft.lat, draft.lon); refresh();
+      if (city && !draft.cityTouched) draft.city = city;
+      if (code && !draft.stateTouched) draft.state = code;
     } catch { /* offline or blocked: user types the city */ }
   }
 
@@ -87,7 +88,18 @@
     render();
     if (editing) { setPin(draft.lat, draft.lon); A.map.flyTo([draft.lat, draft.lon], Math.max(A.map.getZoom(), 6), { duration: 0.6 }); }
     if (mapClick) A.map.off('click', mapClick);
-    mapClick = (e) => { setPin(e.latlng.lat, e.latlng.lng); $('#bWhere').textContent = 'Placed. Click the map again to move it.'; reverseGeocode(draft.lat, draft.lon); if (!editing && !$('#bCall').dataset.touched) { draft.call = suggestCall(draft.lon); $('#bCall').value = draft.call; } refresh(); };
+    mapClick = async (e) => {
+      const first = !draft.placed;
+      setPin(e.latlng.lat, e.latlng.lng);
+      const sub = $('#bWhere'); if (sub) sub.textContent = 'Finding the city…';
+      const tag = draft.placeTag = Math.random();
+      await Promise.race([reverseGeocode(draft.lat, draft.lon), new Promise(r => setTimeout(r, 4000))]);
+      if (!draft || draft.placeTag !== tag) return;
+      // new station: build everything for this spot. Editing or already built: keep the station, just move it
+      if (!editing && (first || !draft.built)) autoBuild('all');
+      else render();
+      setPin(draft.lat, draft.lon);
+    };
     A.map.on('click', mapClick);
     document.getElementById('map').classList.add('placing');
   }
@@ -98,16 +110,70 @@
     draft = null; editing = null;
   }
 
+  // ---------- autopilot ----------
+  function autoBuild(only) {
+    const d = draft;
+    window.RadioAuto.generate(d, { describe: d.desc || '', only });
+    d.built = true;
+    if (only === 'all') { $('#panel').style.setProperty('--c', d.color); }
+    render(); setPin(d.lat, d.lon);
+  }
+
   function render() {
     const d = draft;
+    if (!d.placed) {
+      $('#panelBody').innerHTML = `
+        <div class="hero" style="--c:${d.color}">
+          <div class="hero-top"><div class="logo">✨<small>NEW</small></div>
+          <div><h2>Build a station</h2><div class="sub" id="bWhere"><b>Click anywhere on the map.</b> Everything else is automatic.</div></div></div>
+          <div style="height:14px"></div>
+        </div>
+        <div class="tabpane builder">
+          <label class="fld"><span>Describe it (optional)</span><input id="bDesc" maxlength="120" placeholder="e.g. indie and country, clean, lots of new music" value="${esc(d.desc || '')}"></label>
+          <p class="lead" style="font-size:13px">Click a spot and you'll get a complete station: its sound, name, call letters, slogan, throwback artists and plants. Don't like it? Roll a new one, or fine-tune anything.</p>
+          <div class="bactions"><button class="btn btn-ghost" id="bCancel">Cancel</button><button class="btn btn-ghost" id="bImport">Paste station code</button></div>
+          <p class="hint" id="bErr" role="alert"></p>
+        </div>`;
+      $('#bDesc').addEventListener('input', e => { d.desc = e.target.value; });
+      $('#bCancel').addEventListener('click', () => A.go(''));
+      $('#bImport').addEventListener('click', importCode);
+      return;
+    }
+    const fmt = d.format ? `<span class="chip">${esc(d.format)}</span>` : '';
     const sl = TAGS.map(([k, label]) => `<label class="sl"><span>${label}</span><input type="range" min="0" max="2.5" step="0.05" data-tag="${k}" value="${d.tags[k] ?? 1}"><output>${(d.tags[k] ?? 1).toFixed(2)}</output></label>`).join('');
     $('#panelBody').innerHTML = `
       <div class="hero" style="--c:${d.color}">
         <div class="hero-top"><div class="logo" id="bLogo">${esc(d.freq)}<small>${esc(d.call)}</small></div>
-        <div><h2>${editing ? 'Edit station' : 'Build a station'}</h2><div class="sub" id="bWhere">${d.placed ? 'Placed. Click the map again to move it.' : '<b>Click anywhere on the map</b> to place your tower.'}</div></div></div>
+        <div><h2 id="bTitle">${esc(d.name || (editing ? 'Edit station' : 'New station'))}</h2><div class="sub" id="bWhere"><b>${esc(d.slogan || '')}</b>${d.city ? ' · ' + esc(d.city) + (d.state ? ', ' + esc(d.state) : '') : ''}</div></div></div>
         <div style="height:14px"></div>
       </div>
       <div class="tabpane builder">
+        <div class="autobar">
+          <label class="fld grow"><span>Describe it (optional)</span><input id="bDesc" maxlength="120" placeholder="e.g. indie and country, clean, lots of new music" value="${esc(d.desc || '')}"></label>
+          <button class="btn btn-main" id="bRoll" title="Make a whole new station for this spot">🎲 New idea</button>
+        </div>
+        <div class="autosum">
+          <div class="chips">${fmt}<span class="chip">${Math.round(d.nb * 100)}% new music</span>${d.clean ? '<span class="chip">Clean</span>' : ''}<button class="chip" id="bRollName">🎲 Name</button></div>
+          <p id="bAboutView">${esc(d.about || '')}</p>
+        </div>
+
+        <h3 class="bh">This week's Top 10</h3>
+        <ol class="preview" id="bPreview"></ol>
+
+        <h3 class="bh row">Throwback artists <button class="chip sm" id="bRollHome">🎲 Others</button></h3>
+        <div class="chips" id="bHomeView">${d.home.map(h => `<span class="chip">${esc(h)}</span>`).join('') || '<span class="hint">None yet</span>'}</div>
+        <ul class="gold" id="bGoldView"></ul>
+
+        <h3 class="bh row">Plants <button class="chip sm" id="bRollPlants">🎲 Others</button></h3>
+        <ul class="gold" id="bPlantList">${d.plants.map((p, i) => `<li><div><b>${esc(p[1])}</b><span>${esc(p[2])}</span></div><span class="yr">${i === 0 ? 'BREAKOUT' : 'TEST'}</span></li>`).join('')}</ul>
+
+        <div class="bactions">
+          <button class="btn btn-main" id="bSave">${editing ? 'Save changes' : 'Put it on the air'}</button>
+          <button class="btn btn-ghost" id="bCancel">Cancel</button>
+        </div>
+        <p class="hint" id="bErr" role="alert"></p>
+
+        <details class="fine" ${editing ? 'open' : ''}><summary>Fine-tune everything</summary>
         <div class="grid2">
           <label class="fld"><span>Station name</span><input id="bName" maxlength="28" placeholder="Pine 98.5" value="${esc(d.name)}"></label>
           <label class="fld"><span>Slogan</span><input id="bSlogan" maxlength="48" placeholder="Flagstaff's New Music" value="${esc(d.slogan)}"></label>
@@ -125,24 +191,15 @@
         </div>
         <label class="chk"><input type="checkbox" id="bClean" ${d.clean ? 'checked' : ''}> Clean station: skip explicit songs</label>
 
-        <h3 class="bh">Live preview: this week's Top 10</h3>
-        <ol class="preview" id="bPreview"></ol>
-
         <h3 class="bh">Throwback artists</h3>
         <label class="fld"><span>Signature artists, comma separated (they get first dibs on throwback slots)</span><input id="bHome" value="${esc(d.home.join(', '))}" placeholder="Imagine Dragons, Noah Kahan"></label>
 
         <h3 class="bh">Plants</h3>
-        <label class="fld"><span>Paste Spotify track links for discovery artists. The first one is set up to break out.</span><textarea id="bPlants" placeholder="https://open.spotify.com/track/…">${esc(d.plants.map(p => 'https://open.spotify.com/track/' + p[0]).join('\n'))}</textarea></label>
-        <ul class="gold" id="bPlantList">${d.plants.map(p => `<li><div><b>${esc(p[1])}</b><span>${esc(p[2])}</span></div><span class="yr">${p === d.plants[0] ? 'BREAKOUT' : 'TEST'}</span></li>`).join('')}</ul>
+        <label class="fld"><span>Swap in your own plants (optional): paste Spotify track links, one per line. The first one breaks out.</span><textarea id="bPlants" placeholder="https://open.spotify.com/track/…">${esc(d.plants.map(p => 'https://open.spotify.com/track/' + p[0]).join('\n'))}</textarea></label>
 
-        <label class="fld"><span>About (optional)</span><textarea id="bAbout" maxlength="300" placeholder="What makes this station different?">${esc(d.about)}</textarea></label>
-
-        <div class="bactions">
-          <button class="btn btn-main" id="bSave">${editing ? 'Save changes' : 'Put it on the air'}</button>
-          <button class="btn btn-ghost" id="bCancel">Cancel</button>
-          ${editing ? '' : '<button class="btn btn-ghost" id="bImport">Paste station code</button>'}
-        </div>
-        <p class="hint" id="bErr" role="alert"></p>
+        <label class="fld"><span>About</span><textarea id="bAbout" maxlength="400">${esc(d.about)}</textarea></label>
+        ${editing ? '' : '<div class="bactions"><button class="btn btn-ghost" id="bImport">Paste station code</button></div>'}
+        </details>
       </div>`;
     bind(); refresh();
   }
@@ -153,8 +210,16 @@
 
   function bind() {
     const d = draft, body = $('#panelBody');
+    $('#bDesc').addEventListener('input', e => { d.desc = e.target.value; });
+    $('#bDesc').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); autoBuild('all'); } });
+    $('#bRoll').addEventListener('click', () => autoBuild('all'));
+    $('#bRollName').addEventListener('click', () => autoBuild('name'));
+    $('#bRollHome').addEventListener('click', () => autoBuild('home'));
+    $('#bRollPlants').addEventListener('click', () => autoBuild('plants'));
     const upd = (id, key, fn = (v) => v) => $(id).addEventListener('input', e => { e.target.dataset.touched = '1'; d[key] = fn(e.target.value); refreshSoon(); });
-    upd('#bName', 'name'); upd('#bSlogan', 'slogan'); upd('#bCity', 'city'); upd('#bState', 'state', v => v.toUpperCase()); upd('#bAbout', 'about');
+    upd('#bName', 'name'); upd('#bSlogan', 'slogan'); upd('#bAbout', 'about');
+    upd('#bCity', 'city'); upd('#bState', 'state', v => v.toUpperCase());
+    $('#bCity').addEventListener('input', () => { d.cityTouched = true; }); $('#bState').addEventListener('input', () => { d.stateTouched = true; });
     upd('#bCall', 'call', v => v.toUpperCase().replace(/[^A-Z]/g, ''));
     upd('#bHome', 'home', v => v.split(',').map(s => s.trim()).filter(Boolean));
     $('#bFreq').addEventListener('change', e => { d.freq = e.target.value; refresh(); });
@@ -192,7 +257,7 @@
       if (!known) {
         try { const r = await fetch('https://open.spotify.com/oembed?url=' + encodeURIComponent('https://open.spotify.com/track/' + id)); if (r.ok) { const j = await r.json(); if (j.title) title = j.title; } } catch { /* keep placeholder */ }
       }
-      out.push([id, title, artist, 'pop', 14, 1, 'up']);
+      out.push([id, title, artist, known ? known.tags.join(' ') : 'pop', 14, 1, 'up']);
     }
     out.forEach((p, i) => { p[4] = i === 0 ? 46 : 14; p[5] = i === 0 ? 3 : 1; });
     draft.plants = out;
@@ -203,7 +268,14 @@
   function refresh() {
     if (!draft) return;
     const d = draft;
+    if (!$('#bLogo')) return;
     $('#bLogo').innerHTML = `${esc(d.freq)}<small>${esc(d.call || '----')}</small>`;
+    $('#bTitle').textContent = d.name || 'New station';
+    $('#bWhere').innerHTML = `<b>${esc(d.slogan || '')}</b>${d.city ? ' · ' + esc(d.city) + (d.state ? ', ' + esc(d.state) : '') : ''}`;
+    $('#bAboutView').textContent = d.about || '';
+    $('#bHomeView').innerHTML = d.home.map(h => `<span class="chip">${esc(h)}</span>`).join('') || '<span class="hint">None yet</span>';
+    const gold = E.goldFor({ id: 'pv-' + (d.id || d.newId), custom: true, tags: d.tags, home: d.home, clean: d.clean }).slice(0, 5);
+    $('#bGoldView').innerHTML = gold.map(g => `<li><div><b>${esc(g.title)}</b><span>${esc(g.artist)}</span></div><span class="yr">${g.year || ''}</span></li>`).join('');
     const hint = $('#bCallHint');
     if (hint) {
       const want = westOfMississippi(d.lon) ? 'K' : 'W';
