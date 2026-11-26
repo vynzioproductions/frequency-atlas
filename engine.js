@@ -58,6 +58,8 @@
   (A.songs || []).forEach(r => addSong(mkSong(r, 'current', 'auto')));
   // Daniel's US New Music Chart: its score is the main signal for any song it ranks
   const C = root.RADIO_COMPOSITE || { rows: [] };
+  // brand-new chart songs the daily job found, so they're playable and get spins right away
+  (C.songs || []).forEach(r => addSong(mkSong([...r.slice(0, 7), C.weekEnding, 0], 'current', 'auto')));
   const compByKey = new Map();
   (C.rows || []).forEach(([pos, title, artist, lw, pk, wks, score]) => {
     const key = songKey(title, artist); compByKey.set(key, { pos, lw, pk, wks, score });

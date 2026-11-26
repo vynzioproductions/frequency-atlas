@@ -120,3 +120,13 @@ Tap **＋ Build**, then click anywhere on the map. The autopilot (`builder-auto.
 - **About:** written from all of the above.
 
 Type a description first ("indie and country, clean, lots of new music") to steer it. 🎲 rerolls the whole station, or just the name, throwback artists or plants. **Fine-tune everything** opens every setting.
+
+## US New Music Chart (daily)
+
+`scripts/update-composite.mjs` rebuilds the chart every morning (the **Daily update** workflow) and writes `composite.js`:
+- Spotify US daily chart (kworb.net) 45%, Apple Music US Top 100 (Apple's RSS feed) 30%, Hot Hits USA playlist order 15%, Shazam US Top 200 10%. Ranks only; if a source is down that day, the others are re-balanced.
+- New music gets a lift (songs under 8 weeks old most); no Christmas songs; nothing over 18 months old unless it's a genuine resurgence (only recently back on the Spotify chart, or high on Shazam). No SiriusXM.
+- Last position, peak and weeks come from `composite-history.json`, which carries over the hand-made chart on the first run.
+- New songs on the chart are added to the app right away, so stations can play them.
+
+To change the weights or rules, edit the top of `scripts/update-composite.mjs`.
