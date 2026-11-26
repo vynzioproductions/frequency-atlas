@@ -269,7 +269,7 @@
     const pane = $('#tabpane');
     if (comp) {
       const rows = E.compositeChart();
-      pane.innerHTML = `<div class="weekbar"><div class="wk" style="flex:1">Week ending ${esc(fmtDate(new Date(C.weekEnding + 'T12:00:00Z')))}<small>${esc(C.status || '')}</small></div></div>
+      pane.innerHTML = `<div class="weekbar"><div class="wk" style="flex:1">${C.updated ? 'Updated ' + esc(fmtDate(new Date(C.updated + 'T12:00:00Z'))) : 'Week ending ' + esc(fmtDate(new Date(C.weekEnding + 'T12:00:00Z')))}<small>${esc(C.updated ? 'Rebuilt every day from ' + (C.status || '').split(' · ').slice(1).join(' · ') : C.status || '')}</small></div></div>
         <ol class="chart">${rows.map(e => `
         <li class="row ${e.pos <= 3 ? 'top3' : ''}" style="--c:#2ee6c8" ${e.id ? `data-play="${esc(e.id)}"` : ''} title="${e.id ? 'Play ' + esc(e.title) : 'Not playable yet'}">
           <span class="pos">${e.pos}</span><span class="mv ${moveCls(e.move)}">${esc(e.move === '=' ? '–' : e.move)}</span>
@@ -442,11 +442,11 @@
     else { state.pendingUri = uri; }
   }
 
-  // previews: walk through the station's schedule in order; snap back to what's on now if it gets far ahead
+  // previews: walk through the station's schedule in order
   function previewNext() {
     const st = state.station; if (!st) return;
-    let from = Math.max(Date.now(), state.walkAt || 0);
-    if (from - Date.now() > 20 * 60e3) from = Date.now();
+    // keep walking forward (snapping back to "now" would replay songs just heard)
+    const from = Math.max(Date.now(), state.walkAt || 0);
     const nx = LIVE().upcoming(st, 3, from).find(i => i.song.id !== state.playing?.id);
     if (!nx) return goLive();
     state.walking = true; state.walkAt = nx.end + 1;
