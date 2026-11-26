@@ -4,7 +4,7 @@
 window.RADIO_CONFIG = {
   // Spotify: developer.spotify.com/dashboard → Create app → copy the Client ID.
   // Add your site's address (e.g. https://yourname.github.io/frequency-atlas/) as a Redirect URI.
-  spotifyClientId: '',
+  spotifyClientId: '75071807367a4bad8b6e18facc3cd69a',
 
   // Apple Music: a MusicKit developer token (lasts up to 6 months).
   // Make it with:  node scripts/apple-token.mjs AuthKey_XXXX.p8 TEAMID KEYID
