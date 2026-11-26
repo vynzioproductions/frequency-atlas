@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Frequency Atlas</title>
+<meta name="description" content="Fictional pop radio stations in real US cities — live streams, weekly countdowns and discovery plants.">
+<meta name="theme-color" content="#0b0f1a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="map" aria-label="Map of stations"></div>
+
+<header class="topbar">
+  <a class="brand" href="#" id="brand"><span class="brand-dot"></span>Frequency Atlas</a>
+  <nav class="topnav">
+    <button class="pill" id="btnStations" aria-expanded="false">Stations</button>
+    <button class="pill" id="btnNetwork">Network Top 40</button>
+    <a class="pill" id="btnBuild" href="#build">＋ Build</a>
+  </nav>
+</header>
+
+<aside class="dial" id="dial" hidden>
+  <div class="dial-head">All stations <button class="x" data-close="dial" aria-label="Close">×</button></div>
+  <ul id="dialList"></ul>
+</aside>
+
+<section class="panel" id="panel" hidden aria-live="polite">
+  <div class="panel-grip" aria-hidden="true"></div>
+  <button class="x panel-x" data-close="panel" aria-label="Close panel">×</button>
+  <div id="panelBody"></div>
+</section>
+
+<footer class="player" id="player" hidden>
+  <div class="player-meta">
+    <div class="player-station" id="plStation"></div>
+    <div class="player-now"><span class="cat" id="plCat"></span><span id="plTitle">Pick a station</span></div>
+  </div>
+  <div class="player-embed"><div id="spotifyEmbed"></div></div>
+  <div class="player-ctrls">
+    <button class="ctrl" id="plSkip" title="Next song" aria-label="Next song" hidden>⏭</button>
+    <button class="ctrl live" id="plLive" title="Back to the live broadcast" hidden>LIVE</button>
+    <button class="ctrl" id="plVoice" title="Station IDs between songs" aria-pressed="true">ID</button>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="data.js"></script>
+<script src="library.js"></script>
+<script src="auto.js"></script>
+<script src="composite.js"></script>
+<script src="durations.js"></script>
+<script src="engine.js"></script>
+<script src="clock.js"></script>
+<script src="dj.js"></script>
+<script src="broadcast.js"></script>
+<script src="app.js"></script>
+<script src="builder.js"></script>
+<script src="sync.js"></script>
+<script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
+</body>
+</html>
