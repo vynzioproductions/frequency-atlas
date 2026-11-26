@@ -45,7 +45,7 @@
         if (v.voice) u.voice = v.voice;
         u.pitch = v.pitch; u.rate = v.rate; u.onend = fin; u.onerror = fin;
         speechSynthesis.cancel(); speechSynthesis.speak(u);
-        setTimeout(fin, 3500 + text.length * 90); // never get stuck if the device drops the end event
+        window.RadioClock.wait(3500 + text.length * 90).then(fin); // never get stuck if the device drops the end event
       } catch { fin(); }
     });
   }
@@ -89,13 +89,13 @@
       if (kind === 'drop') {
         tone(ac, out, t, root / 2, 0.5, 0.7, 'sine'); noiseBurst(ac, out, t, 0.25, 2000, 200, 0.4);
         tone(ac, out, t + 0.05, notes[notes.length - 1] * 2, 0.4, 0.25);
-        return setTimeout(resolve, 650);
+        return window.RadioClock.wait(650).then(resolve);
       }
       notes.forEach((f, i) => tone(ac, out, t + i * 0.11, f, i === notes.length - 1 ? 1.1 : 0.45, 0.5));
       notes.forEach((f, i) => tone(ac, out, t + i * 0.11, f * 2, 0.35, 0.12, 'sine'));
       const end = t + notes.length * 0.11;
       if (kind === 'full') [0, 4, 7].forEach(s => tone(ac, out, end, notes[0] * Math.pow(2, s / 12) / 2, 1.2, 0.18, 'sawtooth'));
-      setTimeout(resolve, (end - ac.currentTime + (kind === 'full' ? 0.5 : 0.2)) * 1000);
+      window.RadioClock.wait((end - ac.currentTime + (kind === 'full' ? 0.5 : 0.2)) * 1000).then(resolve);
     });
   }
 

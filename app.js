@@ -301,7 +301,7 @@
   const CLOCK = ['power', 'currents', 'adds', 'power', 'gold', 'deep', 'currents', 'plants', 'power', 'medium', 'adds', 'currents', 'gold', 'power', 'deep', 'recurrents'];
   state.cd = []; state.mode = 'live'; state.queue = [];
   let liveTimer = null, previewWarned = false;
-  const stopTimer = () => { clearTimeout(liveTimer); liveTimer = null; };
+  const stopTimer = () => { clearTimeout(liveTimer); liveTimer = null; state.nextAt = null; };
   const hush = () => { try { speechSynthesis.cancel(); } catch { /* no speech */ } };
   const fmtClock = (st, ms) => new Intl.DateTimeFormat('en-US', { timeZone: st.tz || DJ.TZ?.[st.id] || 'America/Phoenix', hour: 'numeric', minute: '2-digit' }).format(new Date(ms));
 
@@ -330,16 +330,23 @@
     scheduleNext(next);
     refreshListen();
   }
-  function scheduleNext(next) {
-    stopTimer(); if (!next) return;
-    liveTimer = setTimeout(() => {
-      if (state.mode !== 'live') return;
-      const { item, offset, next: after } = LIVE().at(state.station);
-      if (item) playItem(item, offset); else idle();
-      scheduleNext(after);
-      refreshListen();
-    }, Math.max(200, next.start - Date.now()));
+  // the next scheduled item starts when the background-safe clock (clock.js) or a Spotify
+  // progress update says it's time, so a hidden tab keeps the broadcast moving
+  function scheduleNext(next) { state.nextAt = next ? next.start : null; }
+  function liveCheck(now = Date.now()) {
+    if (state.mode !== 'live' || !state.station || !state.nextAt || now < state.nextAt - 250) return;
+    const { item, offset, next } = LIVE().at(state.station, Math.max(now, state.nextAt));
+    scheduleNext(next);
+    if (item) playItem(item, offset); else idle();
+    if (!document.hidden) refreshListen();
   }
+  window.RadioClock.onTick(liveCheck);
+  // coming back to the tab: if anything was missed, jump to what's on now
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || state.mode !== 'live' || !state.station) return;
+    const { item } = LIVE().at(state.station);
+    if (item && item.type === 'song' && item.song.id !== state.playing?.id) goLive(); else refreshListen();
+  });
   function idle() { $('#plCat').textContent = ''; $('#plTitle').textContent = 'Stay tuned…'; }
   async function playItem(item, offset) {
     hush();
@@ -425,6 +432,7 @@
       let lastPos = 0, wasPlaying = false;
       controller.addListener('playback_update', (e) => {
         const { isPaused, position, duration } = e.data || {};
+        liveCheck();
         if (!duration) return;
         if (state.pendingSeek && !isPaused) {          // joining live mid-song: jump to where everyone else is
           const to = state.pendingSeek; state.pendingSeek = 0;
