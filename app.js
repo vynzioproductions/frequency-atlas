@@ -19,10 +19,17 @@
 
   // ---------------- map ----------------
   const map = L.map('map', { zoomControl: false, worldCopyJump: true, attributionControl: true }).setView([38.5, -97], window.innerWidth < 760 ? 3 : 4);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 12, minZoom: 3,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  }).addTo(map);
+  // Dark basemap that needs no API key (Esri), with OpenStreetMap darkened by CSS as a backup
+  const esriAttr = 'Tiles &copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, &copy; OpenStreetMap contributors';
+  const base = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 12, minZoom: 3, attribution: esriAttr }).addTo(map);
+  const labels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 12, minZoom: 3, pane: 'overlayPane', opacity: 0.8 }).addTo(map);
+  let tileErrors = 0;
+  base.on('tileerror', () => {
+    if (++tileErrors !== 6) return;
+    map.removeLayer(base); map.removeLayer(labels);
+    document.getElementById('map').classList.add('osm-dark');
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 12, minZoom: 3, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
+  });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   // zoomed out, the stations crowd together: show names only on hover until you zoom in
   const syncLabels = () => document.getElementById('map').classList.toggle('far', map.getZoom() < 5);
