@@ -46,6 +46,10 @@
     ['55iSVA6k6fDtFMK98XKy7w', 'Tremendo Desastre', 'Myke Towers & Rauw Alejandro', 'latin', 12.2, 2, 'up'],
     ['23rcMbTChRPIwtCycyb3E4', 'DEPENDS', 'XG', 'kpop dance', 11.4, 2, 'up'],
     ['7atOpwxr1aIeRlyGEPNn0C', 'Crazy For You', 'Lana Del Rey', 'alt indie', 11.2, 2, 'up'],
+    ['4EVSMqqVEehvyyOBmjNTlA', 'Lies', 'Zach Bryan feat. Lana Del Rey', 'country alt', 31.5, 6, 'hold'],
+    ['5d2Sj3lMKJFefwU26GInQu', 'Party With The Boys', 'Don Toliver', 'rap rnb', 23.7, 2, 'up'],
+    ['0a5qYlqZgVqynD4lsGwvPT', 'WTF GOIN', 'Belly Gang Kushington feat. 21 Savage', 'rap', 16.3, 12, 'down'],
+    ['6VDw2mGBIa4csypjOhS6JT', 'Suzuki', 'Fuerza Regida', 'latin', 11.2, 1, 'up'],
 
     // Added by the station music directors: brand-new releases and deeper currents
     ['66owIEhGwAjAi2yPmwa2dU', 'Power Trip', 'JENNIE', 'kpop dance', 20, 1, 'up'],

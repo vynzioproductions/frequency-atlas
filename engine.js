@@ -32,7 +32,7 @@
     return t + '|' + a;
   }
   function cleanTitle(t) { return String(t).replace(/\s+-\s+(from|remaster|single|radio|official|recorded|live|sped|feat).*$/i, '').trim(); }
-  const EXPLICIT = new Set([...(L.explicit || []), '1alX84LuLflUU7n4ow0aSM', '3SoarlzPEiF7NgSeGsh44S', '2IQFvDSTIpkFU0VwqfKIui', '0uie2qIGjrvmmcwNGObx2s', '7rKNJgNYwgBN7bNYJrJU24']);
+  const EXPLICIT = new Set([...(L.explicit || []), '1alX84LuLflUU7n4ow0aSM', '3SoarlzPEiF7NgSeGsh44S', '2IQFvDSTIpkFU0VwqfKIui', '0uie2qIGjrvmmcwNGObx2s', '7rKNJgNYwgBN7bNYJrJU24', '5d2Sj3lMKJFefwU26GInQu', '0a5qYlqZgVqynD4lsGwvPT', '6VDw2mGBIa4csypjOhS6JT']);
 
   function mkSong(row, kind, src, only) {
     const [id, title, artist, tags, score, weeks, trend, asOf, x] = row;
@@ -56,6 +56,25 @@
   D.CURRENTS.forEach(r => addSong(mkSong(r, 'current', 'seed')));
   (L.currents || []).forEach(r => addSong(mkSong(r, 'current', 'lib')));
   (A.songs || []).forEach(r => addSong(mkSong(r, 'current', 'auto')));
+  // Daniel's US New Music Chart: its score is the main signal for any song it ranks
+  const C = root.RADIO_COMPOSITE || { rows: [] };
+  const compByKey = new Map();
+  (C.rows || []).forEach(([pos, title, artist, lw, pk, wks, score]) => {
+    const key = songKey(title, artist); compByKey.set(key, { pos, lw, pk, wks, score });
+    const s = byKey.get(key);
+    if (!s || !C.weekEnding) return;
+    if (Date.parse(s.asOf) > Date.parse(C.weekEnding) + 7 * DAY) return; // much newer data wins
+    const trend = lw == null ? 'up' : lw > pos + 1 ? 'up' : lw < pos - 1 ? 'down' : 'hold';
+    const merged = { ...s, score, weeks: Math.max(1, wks), trend, asOf: C.weekEnding, src: 'composite' };
+    byKey.set(key, merged); SONGS.set(merged.id, merged);
+  });
+  function compositeChart() {
+    return (C.rows || []).map(([pos, title, artist, lw, pk, wks, score]) => {
+      const song = byKey.get(songKey(title, artist));
+      const move = lw == null ? (wks > 1 ? 'RE' : 'NEW') : lw === pos ? '=' : lw > pos ? '▲' + (lw - pos) : '▼' + (pos - lw);
+      return { pos, title: cleanTitle(title), artist, lw, pk, wks, score, move, id: song ? song.id : null };
+    });
+  }
   D.STATIONS.forEach(st => st.plants.forEach(r => { const s = mkSong(r, 'plant', 'seed', st.id); SONGS.set(s.id, s); }));
 
   const GOLD = new Map();
@@ -271,7 +290,7 @@
   }
 
   root.RadioEngine = {
-    STATIONS, byId, SONGS, GOLD, goldFor, custom, AUTO: A, LIBRARY: L, CHART_SIZE, NETWORK_SIZE,
+    STATIONS, byId, SONGS, GOLD, goldFor, custom, AUTO: A, LIBRARY: L, COMPOSITE: C, compositeChart, CHART_SIZE, NETWORK_SIZE,
     weekIndexFor, weekEnding, countdown, networkChart, plantReport, rotation, stationSpins, hash,
     nowWeek: () => Math.max(0, weekIndexFor(Date.now())),
   };
