@@ -64,9 +64,9 @@
   D.CURRENTS.forEach(r => addSong(mkSong(r, 'current', 'seed')));
   (L.currents || []).forEach(r => addSong(mkSong(r, 'current', 'lib')));
   // the weekly Spotify chart, minus anything from before 2010 ("nothing too old") and remasters of old songs
-  const MIN_YEAR = D.GOLD_MIN_YEAR || 2010, REL = A.releases || {};
+  const MIN_YEAR = D.GOLD_MIN_YEAR || 2010, REL = A.releases || {}, ORIG = A.origins || {};
   const HOLIDAY = /christmas|xmas|santa|jingle|sleigh|mistletoe|let it snow|navidad|holiday|reindeer|winter wonderland|silent night|underneath the tree|rockin' around|most wonderful time|deck the halls|o holy night|joy to the world|carol of the bells/i;
-  (A.songs || []).filter(r => !/remaster/i.test(r[1]) && !HOLIDAY.test(r[1]) && !(REL[r[0]] && +REL[r[0]].slice(0, 4) < MIN_YEAR))
+  (A.songs || []).filter(r => !/remaster/i.test(r[1]) && !HOLIDAY.test(r[1]) && !(REL[r[0]] && +REL[r[0]].slice(0, 4) < MIN_YEAR) && !(ORIG[r[0]] && ORIG[r[0]] < MIN_YEAR))
     .forEach(r => addSong(mkSong(r, 'current', 'auto')));
   // Daniel's US New Music Chart: its score is the main signal for any song it ranks
   const C = root.RADIO_COMPOSITE || { rows: [] };
@@ -181,9 +181,15 @@
     const a = weekIndexFor(Date.parse(song.asOf + 'T12:00:00Z'));
     const debut = a + 1 - song.weeks;
     let peak, decay;
-    if (song.trend === 'up') { peak = a + (song.weeks <= 2 ? 5 : 3 + Math.round(hash(song.id) * 3)); decay = 10; }
-    else if (song.trend === 'hold') { peak = a + Math.round(hash(song.id + 'p') * 2) - 1; decay = 12; }
-    else { peak = a - Math.max(2, Math.round(song.weeks * 0.3)); decay = 9; }
+    if (song.trend === 'up' && song.weeks <= 12) { peak = a + (song.weeks <= 2 ? 5 : 3 + Math.round(hash(song.id) * 3)); decay = 10; }
+    else if (song.weeks <= 8) { peak = a + (song.trend === 'down' ? -2 : Math.round(hash(song.id + 'p') * 2) - 1); decay = song.trend === 'down' ? 9 : 12; }
+    else {
+      // a song that's been around a while peaked in the past: it rose for about a quarter of its run (2–10
+      // weeks), then faded slowly enough to still be where it is today. Long runners used to be drawn as
+      // still climbing toward a peak right now, which kept some at #1 for most of the year.
+      peak = debut + Math.max(2, Math.min(10, Math.round(song.weeks * 0.25)));
+      decay = Math.max(song.trend === 'down' ? 9 : 12, (a - peak) / 0.8);
+    }
     if (peak < debut) peak = debut;
     return { a, debut, peak, decay };
   }
@@ -201,7 +207,7 @@
     if (!sh) {
       sh = shape(song);
       const now = song.kind === 'plant' ? song.score : song.src === 'lib' ? 8 + 0.9 * song.score : 28 + 0.7 * song.score;
-      sh.height = now / Math.max(0.05, curve(sh, sh.a));
+      sh.height = now / Math.max(0.3, curve(sh, sh.a));          // a song's peak is at most ~3x where it is now
       SHAPES.set(song.id, sh);
     }
     return sh.height * curve(sh, x);
@@ -343,7 +349,11 @@
     if (memo.has(key)) return memo.get(key);
     // rank on this week's spins blended with last week's, so new songs climb instead of teleporting
     const prev = new Map(spinsAt(st, x - 1).map(r => [r.song.id, r.spins]));
-    const ranked = spinsAt(st, x).map(r => ({ ...r, pts: 0.65 * r.spins + 0.35 * (prev.get(r.song.id) || 0) }))
+    // burn: a song that's sat in the top 3 for more than 6 straight weeks starts losing ground, the way
+    // stations cut back a hit listeners have heard enough of (so nothing camps at #1 for half a year)
+    const lastTop = x > EARLIEST() ? new Map(rawChart(st, x - 1).chart.filter(c => c.pos <= 3).map(c => [c.song.id, c.topRun || 1])) : new Map();
+    const burn = (id) => { const n = lastTop.get(id) || 0; return n > 6 ? Math.pow(0.88, n - 6) : 1; };
+    const ranked = spinsAt(st, x).map(r => ({ ...r, pts: (0.65 * r.spins + 0.35 * (prev.get(r.song.id) || 0)) * burn(r.song.id) }))
       .sort((a, b) => b.pts - a.pts);
     // recurrent rule: songs 20+ weeks old leave the chart once they fall below #20
     const kept = ranked.filter((r, i) => !(r.age > 20 && i >= 20));
@@ -359,7 +369,7 @@
       if (i < 0) i = 0;
       const r = pool.splice(i, 1)[0];
       if (isNew(r)) debuts++;
-      chart.push({ pos: p, ...r });
+      chart.push({ pos: p, ...r, topRun: p <= 3 ? (lastTop.get(r.song.id) || 0) + 1 : 0 });
     }
     memo.set(key, { chart, ranked });
     return memo.get(key);
