@@ -179,7 +179,7 @@
       <li class="row ${e.pos <= 3 ? 'top3' : ''}" data-play="${esc(e.song.id)}" data-cat="pick" title="Play ${esc(e.song.title)}">
         <span class="pos">${e.pos}</span><span class="mv ${moveCls(e.move)}">${esc(e.move === '=' ? '–' : e.move)}</span>
         <span class="ti"><b>${esc(e.song.title)}${e.song.kind === 'plant' ? '<span class="badge plant">PLANT</span>' : ''}</b><span>${esc(e.song.artist)}</span></span>
-        <span class="st"><b>${e.spins}</b>${e.bullet ? '<span class="badge bul">●</span>' : ''} spins<br>LW ${e.lw ?? '–'} · PK ${e.pk} · ${e.wks} wk${e.wks > 1 ? 's' : ''}</span>
+        <span class="st"><b>${e.spins}</b>${e.bullet ? '<span class="badge bul">●</span>' : ''} spins<br>LW ${e.lw ?? '–'}${e.pk != null ? ` · PK ${e.pk} · ${e.wks} wk${e.wks > 1 ? 's' : ''}` : ''}</span>
       </li>`).join('')}</ol>
       <p class="legend">Ranked on spins this week blended with last week. ● = spins up from last week. Debuts can enter no higher than #15, and nothing climbs more than 10 spots in a week. Songs 20+ weeks old go recurrent below #20.</p>`;
     pane.querySelectorAll('[data-wk]').forEach(b => b.addEventListener('click', () => { state.week += +b.dataset.wk; renderStation(st); }));
@@ -404,8 +404,13 @@
       return;
     }
     if (comp) {
-      const rows = E.compositeChart();
-      pane.innerHTML = `<div class="weekbar"><div class="wk" style="flex:1">${C.updated ? 'Updated ' + esc(fmtDate(new Date(C.updated + 'T12:00:00Z'))) : 'Week ending ' + esc(fmtDate(new Date(C.weekEnding + 'T12:00:00Z')))}<small>${esc(C.updated ? 'Rebuilt every day from ' + (C.status || '').split(' · ').slice(1).join(' · ') : C.status || '')}</small></div></div>
+      const weeks = E.compositeWeeks ? E.compositeWeeks() : [], cw = state.compWeek && weeks.includes(state.compWeek) && state.compWeek !== C.weekEnding ? state.compWeek : null;
+      const rows = E.compositeChart(cw);
+      const head = cw ? 'Week ending ' + esc(fmtDate(new Date(cw + 'T12:00:00Z')))
+        : C.updated ? 'Updated ' + esc(fmtDate(new Date(C.updated + 'T12:00:00Z'))) : 'Week ending ' + esc(fmtDate(new Date(C.weekEnding + 'T12:00:00Z')));
+      const sub = cw ? 'From your chart sheet\'s archive' : C.fromSheet ? 'From your chart sheet · ' + (C.status || 'Official') : C.updated ? 'Rebuilt every day from ' + (C.status || '').split(' · ').slice(1).join(' · ') : C.status || '';
+      const pick = weeks.length ? `<select class="compwk" aria-label="Chart week"><option value="">This week</option>${weeks.filter(w => w !== C.weekEnding).map(w => `<option value="${w}" ${w === cw ? 'selected' : ''}>${esc(fmtDate(new Date(w + 'T12:00:00Z')))}</option>`).join('')}</select>` : '';
+      pane.innerHTML = `<div class="weekbar"><div class="wk" style="flex:1">${head}<small>${esc(sub)}</small></div>${pick}</div>
         <ol class="chart">${rows.map(e => `
         <li class="row ${e.pos <= 3 ? 'top3' : ''}" style="--c:#2ee6c8" ${e.id ? `data-play="${esc(e.id)}"` : ''} title="${e.id ? 'Play ' + esc(e.title) : 'Not playable yet'}">
           <span class="pos">${e.pos}</span><span class="mv ${moveCls(e.move)}">${esc(e.move === '=' ? '–' : e.move)}</span>
@@ -413,6 +418,7 @@
           <span class="st"><b>${e.score.toFixed(1)}</b> pts<br>LW ${e.lw ?? '–'} · PK ${e.pk} · ${e.wks} wk${e.wks > 1 ? 's' : ''}</span>
         </li>`).join('')}</ol>
         <p class="legend">Your US New Music Chart. Its scores drive how hot each song runs on every station. Tap a song to hear it on the station you last tuned to.</p>`;
+      pane.querySelector('.compwk')?.addEventListener('change', (ev) => { state.compWeek = ev.target.value || null; renderNetwork(); });
       pane.querySelectorAll('[data-play]').forEach(el => el.addEventListener('click', () => {
         const song = E.SONGS.get(el.dataset.play); if (!song) return;
         request(state.station || E.byId.tucson, song, 'pick');

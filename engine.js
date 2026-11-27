@@ -69,7 +69,12 @@
   (A.songs || []).filter(r => !/remaster/i.test(r[1]) && !HOLIDAY.test(r[1]) && !(REL[r[0]] && +REL[r[0]].slice(0, 4) < MIN_YEAR) && !(ORIG[r[0]] && ORIG[r[0]] < MIN_YEAR))
     .forEach(r => addSong(mkSong(r, 'current', 'auto')));
   // Daniel's US New Music Chart: its score is the main signal for any song it ranks
-  const C = root.RADIO_COMPOSITE || { rows: [] };
+  // Daniel's own chart sheet (sheet-chart.js) wins whenever it's as new as the daily rebuild or newer;
+  // the rebuild still supplies brand-new songs, world charts and history ids
+  const C0 = root.RADIO_COMPOSITE || { rows: [] }, SH = root.RADIO_SHEET;
+  const useSheet = !!(SH && SH.rows?.length && (!C0.weekEnding || SH.weekEnding >= C0.weekEnding));
+  const C = useSheet ? { ...C0, rows: SH.rows, weekEnding: SH.weekEnding, updated: SH.updated, status: SH.status, fromSheet: true } : C0;
+  const SHEET_HISTORY = (SH && SH.history) || {};
   // brand-new chart songs the daily job found, so they're playable and get spins right away
   (C.songs || []).forEach(r => addSong(mkSong([...r.slice(0, 7), C.weekEnding, 0], 'current', 'auto')));
   const compByKey = new Map();
@@ -82,7 +87,17 @@
     const merged = { ...s, score, weeks: Math.max(1, wks), trend, asOf: C.weekEnding, src: 'composite' };
     byKey.set(key, merged); SONGS.set(merged.id, merged);
   });
-  function compositeChart() {
+  // past weeks from the sheet's History tab: [[pos, title, artist, score]]
+  function compositeWeeks() { return Object.keys(SHEET_HISTORY).sort().reverse(); }
+  function compositeChart(week) {
+    if (week && SHEET_HISTORY[week]) {
+      const prevWeek = compositeWeeks().find(w => w < week), prev = new Map((SHEET_HISTORY[prevWeek] || []).map(r => [songKey(r[1], r[2]), r[0]]));
+      return SHEET_HISTORY[week].map(([pos, title, artist, score]) => {
+        const song = byKey.get(songKey(title, artist)), lw = prev.get(songKey(title, artist)) ?? null;
+        const move = lw == null ? 'NEW' : lw === pos ? '=' : lw > pos ? '▲' + (lw - pos) : '▼' + (pos - lw);
+        return { pos, title: cleanTitle(title), artist, lw, pk: null, wks: null, score, move, id: song ? song.id : null };
+      });
+    }
     return (C.rows || []).map(([pos, title, artist, lw, pk, wks, score]) => {
       const song = byKey.get(songKey(title, artist));
       const move = lw == null ? (wks > 1 ? 'RE' : 'NEW') : lw === pos ? '=' : lw > pos ? '▲' + (lw - pos) : '▼' + (pos - lw);
@@ -560,7 +575,7 @@
 
   root.RadioEngine = {
     addStation, removeStation, previewChart, durationOf, songKey,
-    STATIONS, byId, SONGS, GOLD, goldFor, custom, AUTO: A, LIBRARY: L, COMPOSITE: C, compositeChart, CHART_SIZE, NETWORK_SIZE,
+    STATIONS, byId, SONGS, GOLD, goldFor, custom, AUTO: A, LIBRARY: L, COMPOSITE: C, compositeChart, compositeWeeks, CHART_SIZE, NETWORK_SIZE,
     weekIndexFor, weekEnding, countdown, isEstablished, FIRST_WEEK, inScope, weeklyAdds, dailyAdds, daysOfWeek, weekOfDay, today, networkReady: (k, scope = 'us') => netMemo.has(scope + ':' + k), networkChart, plantReport, rotation, stationSpins, hash,
     nowWeek: () => Math.max(0, weekIndexFor(Date.now())),
   };

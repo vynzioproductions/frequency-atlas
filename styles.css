@@ -92,6 +92,7 @@ a.pill { color: var(--ink); text-decoration: none; display: inline-flex; align-i
 .weekbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 2px 10px; }
 .weekbar .wk { font-weight: 700; font-size: 15px; text-align: center; }
 .weekbar .wk small { display: block; color: var(--mute); font-weight: 500; font-size: 12px; }
+.weekbar .compwk { background: var(--panel, #1b1f2a); color: inherit; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; }
 .navbtn { background: #ffffff10; border: 0; width: 40px; height: 40px; border-radius: 12px; font-size: 18px; }
 .navbtn:disabled { opacity: .3; cursor: default; }
 .cdbtn { width: 100%; justify-content: center; margin: 0 0 12px; }
