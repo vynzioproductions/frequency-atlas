@@ -692,7 +692,9 @@
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   window.RadioApp = { map, go, toast, esc, store, addMarker, removeMarker, renderDial, markers, nowWeek: NOW,
-    shareStation, onEnded, liveCheck, current: () => state.playing, stationId: () => state.station?.id, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
+    shareStation, onEnded, liveCheck, current: () => state.playing, stationId: () => state.station?.id,
+    // the Spotify app on a phone plays the queue at its own pace: show what it's actually playing
+    showNow: (song) => { $('#plTitle').textContent = `${song.title} — ${song.artist}`; }, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
     // the next songs after the current one, so a phone's Spotify app can keep playing in the background
     upNext: (n) => state.mode === 'live' && state.station ? LIVE().upcoming(state.station, n + 1).map(i => i.song.id) : state.cd.map(c => c.song.id).slice(0, n),
     replay: () => { if (!state.station) return; if (state.mode === 'live') goLive(); else if (state.playing) playSong(state.playing, state.playingCat); },

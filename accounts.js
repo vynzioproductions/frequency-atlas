@@ -197,19 +197,33 @@
       const reset = s.paused && this.wasPlaying && s.position === 0 && this.lastPos >= this.dur - 3000;
       if ((nearEnd || reset) && this.endedFor !== this.current) { this.endedFor = this.current; this.wasPlaying = false; A.onEnded(); }
     },
+    // Phones: once the radio is playing in the Spotify app, the app is the clock. The page only watches:
+    // it shows what the app is playing and keeps the app's queue topped up with the station's schedule.
+    // (Re-syncing the app to the page's schedule every time you opened the site is what made songs
+    // jump forward and back: the app plays songs back to back and runs ahead of the schedule.)
     async pollRemote() {
-      if (!this.current || source !== 'spotify' || document.hidden || Date.now() - this.lastPoll < 3000) return;
+      if (source !== 'spotify' || !this.queue || document.hidden || Date.now() - this.lastPoll < 3000) return;
       this.lastPoll = Date.now();
-      const r = await this.api('GET', '/me/player'); if (!r || r.status === 204 || !r.ok) return;
-      const s = await r.json(); const id = s.item?.id, cur = this.current;
-      this.remote = { id, pos: s.progress_ms, playing: s.is_playing, at: Date.now() };
-      A.liveCheck();
-      if (!cur || this.endedFor === cur) return;
-      if (id === cur.id) { if (s.is_playing) { this.wasPlaying = true; this.lastPos = s.progress_ms; this.dur = s.item.duration_ms; } }
-      // the app moved past our song (it plays the queued schedule on its own), or stopped at the end
-      const movedOn = this.wasPlaying && id && id !== cur.id && !s.item?.linked_from;
-      const stopped = this.wasPlaying && !s.is_playing && this.lastPos >= this.dur - 6000;
-      if (movedOn || stopped) { this.endedFor = cur; this.wasPlaying = false; A.onEnded(); }
+      const rm = await this.remoteNow(); if (!rm || !rm.id) return;
+      const i = this.queue.indexOf(rm.id);
+      if (i < 0) return;
+      const sg = E.SONGS.get(rm.id);
+      if (sg && sg !== this.shown) { this.shown = sg; A.showNow(sg); }
+      if (this.queue.length - i <= 4) this.topUp();
+    },
+    async topUp() {
+      if (this.topping) return; this.topping = true;
+      try {
+        const next = A.upNext(60);
+        const last = this.queue[this.queue.length - 1];
+        let from = next.indexOf(last) + 1;
+        const add = next.slice(from).filter(id => !this.queue.includes(id)).slice(0, 10);
+        for (const id of add) {
+          const r = await this.api('POST', '/me/player/queue?uri=' + encodeURIComponent('spotify:track:' + id));
+          if (!r || !(r.ok || r.status === 204)) break;
+          this.queue.push(id);
+        }
+      } finally { this.topping = false; }
     },
     // phones: tell the Spotify app to play this song plus what's scheduled after it,
     // so the radio keeps going even when the browser is in the background
@@ -226,12 +240,9 @@
       // so it runs a little ahead of the schedule. If it's already on this song, or one song either side
       // of it in our queue, leave it alone: restarting it is what made songs jump and repeat.
       const rm = await this.remoteNow();
-      const q = this.queue || [], qs = this.queueStation === A.stationId();
-      if (rm && rm.playing && rm.id) {
-        const a = q.indexOf(rm.id), b = q.indexOf(song.id);
-        const same = rm.id === song.id && Math.abs(rm.pos - pos) < 30000;
-        const near = qs && a >= 0 && b >= 0 && Math.abs(a - b) <= 1;
-        if (same || near) { if (this.current !== song) { this.current = song; this.endedFor = null; } return true; }
+      // already playing this station's queue in the app: leave it alone and follow it
+      if (rm && rm.playing && rm.id && this.queue && this.queueStation === A.stationId() && this.queue.includes(rm.id)) {
+        this.current = song; return true;
       }
       this.current = song; this.endedFor = null; this.wasPlaying = false; this.lastPos = 0;
       const ids = [song.id, ...A.upNext(14).filter(id => id !== song.id)];
@@ -264,8 +275,9 @@
       else A.toast('Spotify could not play that song. Playing a preview.');
       return false;
     },
-    pause() {
-      if (this.connect) { if (this.remote?.playing) { this.remote.playing = false; this.api('PUT', '/me/player/pause'); } return; }
+    pause(byListener) {
+      // on phones the app keeps playing through station IDs; it only pauses when you press pause
+      if (this.connect) { if (byListener) { if (this.remote) this.remote.playing = false; this.api('PUT', '/me/player/pause'); } return; }
       this.player?.pause().catch(() => {});
     },
     resume() { if (this.connect) this.api('PUT', '/me/player/play'); else this.player?.resume().catch(() => {}); },
@@ -384,7 +396,7 @@
   function setSource(s) {
     const before = active();
     source = s; store.set('source', s);
-    if (before && before !== active()) { before.pause(); if (before === youtube) youtube.hide(); }
+    if (before && before !== active()) { before.pause(true); if (before === youtube) youtube.hide(); }
     api.held = false;
     refreshUI();
     A.replay();         // pick up the current song with the new player
@@ -402,7 +414,7 @@
   pauseBtn.addEventListener('click', () => {
     const p = active(); if (!p) return;
     api.held = !api.held;
-    if (api.held) p.pause(); else if (A.isLive()) A.replay(); else p.resume();   // live radio rejoins where everyone is
+    if (api.held) p.pause(true); else if (A.isLive()) A.replay(); else p.resume();   // live radio rejoins where everyone is
     pauseBtn.setAttribute('aria-pressed', String(!api.held));
   });
 
