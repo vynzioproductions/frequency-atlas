@@ -534,6 +534,13 @@
     if (!nx || Date.now() - nx.start > 4 * 60000) nx = live.item?.type === 'song' ? live.item : (live.item || live.next);
     onAir(nx, 0);
   }
+  // what plays next from where this listener actually is in the log (not the wall clock)
+  function upNextLive(n) {
+    if (!state.cursor) return LIVE().upcoming(state.station, n + 1).map(i => i.song.id);
+    const out = []; let it = state.cursor;
+    for (let i = 0; i < n * 3 && out.length < n; i++) { it = nextAfter(it); if (!it) break; if (it.type === 'song') out.push(it.song.id); }
+    return out;
+  }
   function scheduleNext(next) { state.nextAt = next ? next.start : null; }
   // Safety net only: if a player stalls and never reports the end of a song, move on.
   // It never cuts a song that is still playing.
@@ -715,7 +722,7 @@
     // the Spotify app on a phone plays the queue at its own pace: show what it's actually playing
     showNow: (song) => { $('#plTitle').textContent = `${song.title} — ${song.artist}`; }, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
     // the next songs after the current one, so a phone's Spotify app can keep playing in the background
-    upNext: (n) => state.mode === 'live' && state.station ? LIVE().upcoming(state.station, n + 1).map(i => i.song.id) : state.cd.map(c => c.song.id).slice(0, n),
+    upNext: (n) => state.mode === 'live' && state.station ? upNextLive(n) : state.cd.map(c => c.song.id).slice(0, n),
     replay: () => { if (!state.station) return; if (state.mode === 'live' && state.cursor?.type === 'song') playSong(state.cursor.song, state.cursor.cat, Date.now() - state.onAirAt); else if (state.mode === 'live') goLive(); else if (state.playing) playSong(state.playing, state.playingCat); },
     stopIf: (id) => { if (state.station?.id === id) { state.station = null; $('#player').hidden = true; } } };
   route();

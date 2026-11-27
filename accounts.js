@@ -170,7 +170,7 @@
           p.connect();
           setTimeout(() => rej(new Error('Spotify player did not start')), 15000);
         });
-        p.addListener('player_state_changed', () => A.liveCheck());
+        p.addListener('player_state_changed', () => { A.liveCheck(); this.poll(); });
         this.device = device;
         return p;
       })();
@@ -194,8 +194,14 @@
       if (!this.current || !this.player || source !== 'spotify') return;
       const s = await this.player.getCurrentState().catch(() => null); if (!s) return;
       this.playingNow = !s.paused;
+      const t = s.track_window?.current_track, tid = t && (t.linked_from?.id || t.id);
+      // Spotify already rolled into the next song we lined up after this one: just follow it
+      // (or moved on to anything else: the station then puts the right song on)
+      if (tid && this.wasPlaying && tid !== this.current.id && this.endedFor !== this.current) {
+        this.endedFor = this.current; this.wasPlaying = false; A.onEnded(); return;
+      }
       if (!s.paused) { this.wasPlaying = true; this.lastPos = s.position; this.dur = s.duration; }
-      const nearEnd = !s.paused && s.duration > 35000 && s.position >= s.duration - 1200;
+      const nearEnd = !this.nextId && !s.paused && s.duration > 35000 && s.position >= s.duration - 1200;
       const reset = s.paused && this.wasPlaying && s.position === 0 && this.lastPos >= this.dur - 3000;
       if ((nearEnd || reset) && this.endedFor !== this.current) { this.endedFor = this.current; this.wasPlaying = false; A.onEnded(); }
     },
@@ -264,12 +270,23 @@
       const p = await this.init().catch(() => null); if (!p) return false;
       const t = await this.token(); if (!t) return false;
       const st0 = await p.getCurrentState().catch(() => null);
-      if (st0 && !st0.paused && st0.track_window?.current_track?.id === song.id && Math.abs(st0.position - (seekSec || 0) * 1000) < 8000) { this.current = song; return true; }
-      this.current = song; this.endedFor = null; this.wasPlaying = false; this.lastPos = 0;
+      const t0 = st0?.track_window?.current_track, id0 = t0 && (t0.linked_from?.id || t0.id);
+      const nextId = A.upNext(4).find(id => id !== song.id) || null;
+      // already playing it (Spotify rolled into it from the queue): keep going, no restart, no gap
+      if (st0 && !st0.paused && id0 === song.id && ((seekSec || 0) < 3 || Math.abs(st0.position - seekSec * 1000) < 8000)) {
+        this.current = song; this.endedFor = null; this.wasPlaying = true;
+        // line up the song after this one too, so the next changeover is just as quick
+        this.nextId = null;
+        if (nextId) this.api('POST', `/me/player/queue?device_id=${encodeURIComponent(this.device)}&uri=${encodeURIComponent('spotify:track:' + nextId)}`)
+          .then(r => { if (r && (r.ok || r.status === 204) && this.current === song) this.nextId = nextId; });
+        return true;
+      }
+      this.current = song; this.endedFor = null; this.wasPlaying = false; this.lastPos = 0; this.nextId = nextId;
       try { p.activateElement?.(); } catch { /* not needed on this browser */ }
       const r = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${encodeURIComponent(this.device)}`, {
         method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uris: ['spotify:track:' + song.id], position_ms: Math.max(0, Math.round((seekSec || 0) * 1000)) }),
+        // the next song goes right behind this one, so Spotify changes over with no gap
+        body: JSON.stringify({ uris: ['spotify:track:' + song.id, ...(nextId ? ['spotify:track:' + nextId] : [])], position_ms: Math.max(0, Math.round((seekSec || 0) * 1000)) }),
       }).catch(() => null);
       if (r && (r.ok || r.status === 202 || r.status === 204)) return true;
       this.current = null;
@@ -303,7 +320,7 @@
       if (this.ready) return this.ready;
       this.ready = (async () => {
         const box = this.box = document.createElement('div'); box.className = 'ytbox'; box.hidden = true;
-        box.innerHTML = '<div id="ytFrame"></div>'; document.body.appendChild(box);
+        box.innerHTML = '<div id="ytFrame"></div><div id="ytFrame2" class="ytdeck2"></div>'; document.body.appendChild(box);
         if (!window.YT?.Player) {
           await new Promise((res, rej) => {
             const prevCb = window.onYouTubeIframeAPIReady; window.onYouTubeIframeAPIReady = () => { prevCb?.(); res(); };
@@ -311,18 +328,22 @@
             setTimeout(() => rej(new Error('YouTube took too long to load')), 20000);
           });
         }
-        return new Promise((res) => {
-          this.player = new YT.Player('ytFrame', {
+        // two decks: the next song is cued on the idle one while the current song plays, so the
+        // changeover is instant instead of waiting for YouTube to load a video
+        const mk = (id) => new Promise((res) => {
+          const pl = new YT.Player(id, {
             width: '100%', height: '100%',
             playerVars: { playsinline: 1, rel: 0, modestbranding: 1, controls: 1, origin: location.origin },
             events: {
-              onReady: () => res(this.player),
+              onReady: () => res(pl),
               onStateChange: (e) => {
+                if (e.target !== this.player) return;            // the idle deck's chatter doesn't matter
                 A.liveCheck();
                 if (e.data === YT.PlayerState.ENDED) this.ended();
                 if (e.data === YT.PlayerState.PLAYING) this.tapHint = false;
               },
-              onError: () => {                 // removed or not allowed to embed: forget it and play the preview
+              onError: (e) => {                 // removed or not allowed to embed: forget it and play the preview
+                if (e.target !== this.player) { if (this.cued && this.cued.deck === pl) { this.ids[this.cued.song.id] = ''; this.cued = null; } return; }
                 const s = this.current; if (!s) return;
                 this.ids[s.id] = ''; store.set('ytIds', this.local());
                 this.current = null; this.hide(); A.previewPlay(s);
@@ -330,6 +351,9 @@
             },
           });
         });
+        const [d1, d2] = await Promise.all([mk('ytFrame'), mk('ytFrame2')]);
+        this.decks = [d1, d2]; this.player = d1;
+        return d1;
       })();
       this.ready.catch(() => { this.ready = null; });
       return this.ready;
@@ -340,6 +364,20 @@
       if (!this.current || !this.player?.getCurrentTime) return;
       const d = this.player.getDuration?.() || 0, t = this.player.getCurrentTime();
       if (d > 35 && t >= d - 1.2) this.ended();
+      else if (d > 35 && t >= d - 30 && !this.cued && !this.cueTried) this.cueNext();
+    },
+    // cue the song that follows on the idle deck
+    async cueNext() {
+      this.cueTried = true;
+      try {
+        const id = A.upNext(4).find(i => i !== this.current?.id); const song = id && E.SONGS.get(id);
+        if (!song) return;
+        const vid = await this.find(song); if (!vid || A.current() !== this.current) return;
+        const deck = this.decks.find(d => d !== this.player);
+        deck.cueVideoById({ videoId: vid, startSeconds: 0 });
+        deck.setVolume?.(100);
+        this.cued = { song, vid, deck };
+      } catch { this.cued = null; }
     },
     // songs the daily GitHub job hasn't matched yet can be looked up here if the site has a YouTube key
     async find(song) {
@@ -372,8 +410,19 @@
       if (!vid) return false;
       const p = await this.init().catch(() => null); if (!p) return false;
       if (A.current() !== song) return true;
-      this.current = song; this.endedFor = null;
+      this.current = song; this.endedFor = null; this.cueTried = false;
       this.show();
+      const c = this.cued; this.cued = null;
+      if (c && c.song.id === song.id && c.vid === vid && (seekSec || 0) < 3 && this.decks) {
+        // the song is already cued: swap decks and start it right away
+        const old = this.player; this.player = c.deck;
+        document.getElementById('ytFrame2')?.classList.toggle('ytdeck-on', this.player === this.decks[1]);
+        document.getElementById('ytFrame')?.classList.toggle('ytdeck-off', this.player === this.decks[1]);
+        try { this.player.setVolume(100); this.player.playVideo(); } catch { /* fall through to the timer */ }
+        try { old.pauseVideo(); } catch { /* idle */ }
+        setTimeout(() => { if (this.current === song && this.player.getPlayerState?.() !== YT.PlayerState.PLAYING) this.player.loadVideoById({ videoId: vid, startSeconds: 0 }); }, 2500);
+        return true;
+      }
       p.loadVideoById({ videoId: vid, startSeconds: Math.max(0, Math.floor(seekSec || 0)) });
       // phones often need one tap on the video the first time
       setTimeout(() => { if (this.current === song && p.getPlayerState?.() !== YT.PlayerState.PLAYING && !this.hinted) { this.hinted = true; A.toast('Tap the video to start'); } }, 2500);
