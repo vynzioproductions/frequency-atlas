@@ -57,25 +57,47 @@ const minYear = D.GOLD_MIN_YEAR || 2010;
 const cutoff = asOfMs - 78 * 7 * DAY; // at least 18 months old
 const homeOf = new Map();
 D.STATIONS.forEach(st => (st.home || []).forEach(a => homeOf.set(a.toLowerCase(), [...(homeOf.get(a.toLowerCase()) || []), st.id])));
-const goldPick = Object.fromEntries(D.STATIONS.map(st => [st.id, []]));
 const handGoldKeys = new Set(Object.values(D.GOLD).map(g => songKey(g[1], g[2])));
-const goldKeys = new Set();
+// every eligible throwback (2010 or later, at least 18 months old), once each
+const pool = [], goldKeys = new Set();
 for (const s of [...all].sort((a, b) => b.pop - a.pop)) {
   const gk = songKey(s.title, s.artist);
   if (s.year < minYear || !(s.relMs <= cutoff) || isHoliday(s.title) || handGold.has(s.id) || handGoldKeys.has(gk) || usedKeys.has(gk) || goldKeys.has(gk)) continue;
   goldKeys.add(gk);
-  const tags = tagsFor(s.artists);
-  const homes = new Set(s.artists.flatMap(a => homeOf.get(a.toLowerCase()) || []));
-  const scored = D.STATIONS.map(st => {
-    if (st.clean && s.x) return [st.id, 0];
-    const aff = tags.reduce((t, g) => t + (st.tags[g] ?? 1), 0) / tags.length;
-    if (aff < 0.25) return [st.id, 0];
-    return [st.id, aff * (homes.has(st.id) ? 4 : 1) * (0.55 + 0.9 * hash(st.id + s.id)) * (0.6 + s.pop / 100)];
-  }).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 2);
-  scored.forEach(([sid, sc]) => goldPick[sid].push([sc, [s.id, s.title, s.artist, s.year, s.x ? 1 : 0]]));
+  pool.push({ s, tags: tagsFor(s.artists), homes: new Set(s.artists.flatMap(a => homeOf.get(a.toLowerCase()) || [])) });
 }
+// how well a throwback suits a station: its sound, its signature artists, a little personal taste, and how big the song was
+const fit = (st, p) => {
+  if (st.clean && p.s.x) return 0;
+  const aff = p.tags.reduce((t, g) => t + (st.tags[g] ?? 1), 0) / p.tags.length;
+  if (aff < 0.25) return 0;
+  return aff * aff * (p.homes.has(st.id) ? 4 : 1) * (0.55 + 0.9 * hash(st.id + p.s.id)) * (0.6 + p.s.pop / 100);
+};
+// Share them out like a draft: stations take turns picking their best remaining fit, so every station
+// gets a full set (TARGET) and no song is on more than MAX_SHARE stations. Then every song nobody
+// picked goes to the station it suits best, so every eligible throwback is in rotation somewhere.
+const TARGET = 45, MAX_SHARE = 8, CEILING = 70;
+const ranked = Object.fromEntries(D.STATIONS.map(st => [st.id, pool.map((p, i) => [fit(st, p), i]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0])]));
+const picks = Object.fromEntries(D.STATIONS.map(st => [st.id, []]));
+const uses = new Array(pool.length).fill(0), cursor = Object.fromEntries(D.STATIONS.map(st => [st.id, 0]));
+for (let round = 0; round < TARGET; round++) {
+  for (const st of D.STATIONS) {
+    const list = ranked[st.id];
+    while (cursor[st.id] < list.length && uses[list[cursor[st.id]][1]] >= MAX_SHARE) cursor[st.id]++;
+    if (cursor[st.id] >= list.length) continue;
+    const [sc, i] = list[cursor[st.id]++];
+    picks[st.id].push([sc, i]); uses[i]++;
+  }
+}
+let homeless = 0;
+pool.forEach((p, i) => {
+  if (uses[i]) return;
+  const best = D.STATIONS.map(st => [fit(st, p), st]).filter(([sc, st]) => sc > 0 && picks[st.id].length < CEILING).sort((a, b) => b[0] - a[0])[0];
+  if (best) { picks[best[1].id].push([best[0], i]); uses[i]++; } else homeless++;
+});
 const gold = {};
-for (const [sid, list] of Object.entries(goldPick)) gold[sid] = list.sort((a, b) => b[0] - a[0]).slice(0, 45).map(x => x[1]);
+for (const [sid, list] of Object.entries(picks)) gold[sid] = list.sort((a, b) => b[0] - a[0]).map(([, i]) => { const s = pool[i].s; return [s.id, s.title, s.artist, s.year, s.x ? 1 : 0]; });
+console.log(`throwbacks: ${pool.length} eligible, ${pool.length - homeless} in rotation somewhere${homeless ? ` (${homeless} fit no station)` : ''}`);
 
 const explicit = all.filter(s => s.x).map(s => s.id);
 // song lengths (ms) by id and by title|artist, so the broadcast schedule knows when each song ends
