@@ -124,7 +124,7 @@ Type a description first ("indie and country, clean, lots of new music") to stee
 ## US New Music Chart (daily)
 
 `scripts/update-composite.mjs` rebuilds the chart every morning (the **Daily update** workflow) and writes `composite.js`:
-- Spotify US daily chart (kworb.net) 45%, Apple Music US Top 100 (Apple's RSS feed) 30%, Hot Hits USA playlist order 15%, Shazam US Top 200 10%. Ranks only; if a source is down that day, the others are re-balanced.
+- Spotify US daily chart (kworb.net) 40%, Apple Music US Top 100 (Apple's RSS feed) 27%, playlist placement 23% (Hot Hits USA 10%, Apple Music's Today's Hits 7% and A-List: Pop 6%), Shazam US Top 200 10%. Ranks only; if a source is down that day, the others are re-balanced.
 - New music gets a lift (songs under 8 weeks old most); no Christmas songs; nothing over 18 months old unless it's a genuine resurgence (only recently back on the Spotify chart, or high on Shazam). No SiriusXM.
 - Last position, peak and weeks come from `composite-history.json`, which carries over the hand-made chart on the first run.
 - New songs on the chart are added to the app right away, so stations can play them.
@@ -168,3 +168,7 @@ Stations in 52 cities outside the US (`country` in data.js). Each plays mostly w
 ## Don't upload these files by hand
 
 The jobs write `composite.js`, `composite-history.json`, `yt.js`, `auto.js`, `library.js` and `durations.js`. Uploading an older copy over them throws away their work (YouTube matches, chart history), so the update zips leave them out.
+
+## Discovery playlists
+
+The daily job also reads Spotify's **Pop Rising** and **New Music Friday** (and checks Apple Music's **New Music Daily**). Those songs join the library as discoveries, and the stations' music directors favor them when picking adds and plants (artists who are already established are still skipped). A plant found this way shows "Found on Pop Rising" on the station's Plants tab. Playlist IDs are at the top of `scripts/update-composite.mjs`.

@@ -27,7 +27,17 @@ const HIST = path.join(ROOT, 'composite-history.json');
 const today = new Date().toISOString().slice(0, 10);
 const DAY = 864e5;
 
-const WEIGHTS = { spotify: 0.45, apple: 0.30, hothits: 0.15, shazam: 0.10 };
+// mostly streaming, then playlist placement (Spotify's Hot Hits USA and Apple Music's Today's Hits and
+// A-List: Pop), then Shazam for discovery
+const WEIGHTS = { spotify: 0.40, apple: 0.27, hothits: 0.10, todayshits: 0.07, alistpop: 0.06, shazam: 0.10 };
+// Apple Music editorial playlists (music.apple.com/us/playlist/<name>/<id>)
+const APPLE_PLAYLISTS = {
+  todayshits: { id: 'pl.f4d106fed2bd41149aaacabb233eb5eb', name: "Today's Hits" },
+  alistpop: { id: 'pl.5ee8333dbe944d9f9151e97d92d1ead9', name: 'A-List: Pop' },
+  newmusicdaily: { id: 'pl.2b0e6e332fdf4b7a91164da3162127b5', name: 'New Music Daily' },
+};
+// Spotify playlists the stations' music directors dig through for new songs and plants
+const DISCOVERY = { poprising: { id: '37i9dQZF1DWUa8ZRTfalHk', name: 'Pop Rising' }, nmf: { id: '37i9dQZF1DX4JAvHpjipBk', name: 'New Music Friday' } };
 
 const ent = (s) => String(s).replace(/&amp;/g, '&').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 async function get(url, type = 'text') {
@@ -58,14 +68,35 @@ async function apple() {
   if (list.length < 50) throw new Error(`only ${list.length} rows`);
   return list.map((s, i) => ({ rank: i + 1, title: s.name, artist: s.artistName, release: s.releaseDate }));
 }
-async function hothits() {
-  const data = nextData(await get(`https://open.spotify.com/embed/playlist/${HOT_HITS_USA}`));
+async function spotifyPlaylist(id, expect) {
+  const data = nextData(await get(`https://open.spotify.com/embed/playlist/${id}`));
   const name = findKey(data, 'name') || findKey(data, 'title');
-  if (name && !/hot hits usa/i.test(name)) throw new Error(`playlist is "${name}", not Hot Hits USA`);
+  if (name && !String(name).toLowerCase().includes(expect.toLowerCase())) throw new Error(`playlist is "${name}", not ${expect}`);
   const list = findKey(data, 'trackList') || [];
   if (list.length < 20) throw new Error(`only ${list.length} tracks`);
   return list.map((t, i) => ({ rank: i + 1, title: t.title, artist: t.subtitle, id: (String(t.uri).match(/track:([A-Za-z0-9]{22})/) || [])[1] }));
 }
+const hothits = () => spotifyPlaylist(HOT_HITS_USA, 'Hot Hits USA');
+// Apple Music playlist pages carry their track list as JSON; collect every {title, artistName} in order
+async function applePlaylist(key) {
+  const { id, name } = APPLE_PLAYLISTS[key];
+  const html = await get(`https://music.apple.com/us/playlist/${encodeURIComponent(name.toLowerCase().replace(/[^a-z0-9]+/g, '-'))}/${id}`);
+  const blobs = [...html.matchAll(/<script[^>]*type="application\/(?:ld\+)?json"[^>]*>([\s\S]*?)<\/script>/g)].map(m => { try { return JSON.parse(m[1]); } catch { return null; } }).filter(Boolean);
+  const out = [], seen = new Set();
+  const walk = (o, d = 0) => {
+    if (!o || typeof o !== 'object' || d > 25) return;
+    const title = o.title || o.name, artist = o.artistName || o.subtitle || o.byArtist?.name || (Array.isArray(o.byArtist) ? o.byArtist.map(a => a.name).join(', ') : null);
+    if (typeof title === 'string' && typeof artist === 'string' && (o.artistName || o.byArtist || o.duration || o.contentDescriptor?.kind === 'song')) {
+      const k = (title + '|' + artist).toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push({ rank: out.length + 1, title, artist }); }
+    }
+    for (const v of Object.values(o)) walk(v, d + 1);
+  };
+  blobs.forEach(b => walk(b));
+  if (out.length < 20) throw new Error(`only ${out.length} songs found on the page`);
+  return out;
+}
+const todayshits = () => applePlaylist('todayshits');
+const alistpop = () => applePlaylist('alistpop');
 async function shazam() {
   const text = await get('https://www.shazam.com/services/charts/csv/top-200/united-states');
   const lines = text.split(/\r?\n/).filter(Boolean);
@@ -103,7 +134,7 @@ async function main() {
     } catch { /* no earlier chart */ }
   }
   const sources = {};
-  for (const [name, fn] of Object.entries({ spotify, apple, hothits, shazam })) {
+  for (const [name, fn] of Object.entries({ spotify, apple, hothits, todayshits, alistpop, shazam })) {
     try { sources[name] = await fn(); console.log(`${name}: ${sources[name].length} songs`); }
     catch (e) { console.log(`${name}: skipped (${e.message})`); }
   }
@@ -190,7 +221,7 @@ async function main() {
   const seed = Date.parse(g.RADIO_DATA.DATA_WEEK + 'T12:00:00Z');
   const k = Math.max(0, Math.ceil((now - seed) / (7 * DAY)));
   const weekEnding = new Date(seed + k * 7 * DAY).toISOString().slice(0, 10);
-  const used = Object.keys(sources).map(n => ({ spotify: 'Spotify', apple: 'Apple Music', hothits: 'Hot Hits USA', shazam: 'Shazam' })[n]).join(', ');
+  const used = Object.keys(sources).map(n => ({ spotify: 'Spotify', apple: 'Apple Music', hothits: 'Hot Hits USA', todayshits: "Today's Hits", alistpop: 'A-List: Pop', shazam: 'Shazam' })[n]).join(', ');
   // Spotify IDs for the 2026 hits in history.js (from kworb's all-time US list), so they play everywhere
   let historyIds = {};
   try { historyIds = loadBrowserData('composite.js').RADIO_COMPOSITE.historyIds || {}; } catch { /* first run */ }
@@ -229,7 +260,29 @@ async function main() {
   world.weekEnding = weekEnding; world.updated = today;
   console.log(`world: ${got} of ${COUNTRIES.length} country charts updated`);
 
-  const out = { title: 'US New Music Chart', weekEnding, updated: today, status: `Updated ${today} · ${used}`, rows, songs: extra, historyIds, world };
+  // ---- discovery: new and rising songs for the music directors (adds and plants) ----
+  const discovery = [], dseen = new Set(top.map(s => s.key));
+  for (const [src, pl] of Object.entries(DISCOVERY)) {
+    try {
+      const list = await spotifyPlaylist(pl.id, pl.name);
+      for (const t of list) {
+        const key = songKey(ent(t.title), ent(t.artist));
+        if (!t.id || dseen.has(key) || isHoliday(t.title)) continue;
+        dseen.add(key);
+        discovery.push([t.id, ent(t.title), ent(t.artist), tagsFor(ent(t.artist).split(/,|&/).map(a => a.trim())).join(' '), src]);
+      }
+      console.log(`discovery: ${pl.name}: ${list.length} songs`);
+    } catch (e) { console.log(`discovery: ${pl.name} skipped (${e.message})`); }
+  }
+  // New Music Daily (Apple Music): mark songs the app already knows as fresh discoveries
+  try {
+    const nmd = await applePlaylist('newmusicdaily');
+    const byKey = new Map(discovery.map(d => [songKey(d[1], d[2]), d]));
+    nmd.forEach(t => { const d = byKey.get(songKey(ent(t.title), ent(t.artist))); if (d && !d[4].includes('nmd')) d[4] += ' nmd'; });
+    console.log(`discovery: New Music Daily: ${nmd.length} songs`);
+  } catch (e) { console.log(`discovery: New Music Daily skipped (${e.message})`); }
+
+  const out = { title: 'US New Music Chart', weekEnding, updated: today, status: `Updated ${today} · ${used}`, rows, songs: extra, historyIds, world, discovery };
   fs.writeFileSync(path.join(ROOT, 'composite.js'),
     `/* Daniel's US New Music Chart — rebuilt daily by scripts/update-composite.mjs.\n   rows: [pos, title, artist, lastPos, peak, weeks, score]; songs: new chart songs the app didn't know yet. */\nwindow.RADIO_COMPOSITE = ${JSON.stringify(out)};\n`);
   console.log(`composite.js: ${rows.length} songs (${extra.length} new to the app), #1 ${rows[0][1]} — ${rows[0][2]}. Sources: ${used}.`);

@@ -105,6 +105,14 @@
     SONGS.set(id, song); byKey.set(key, song);
   });
 
+  // ----- discovery: songs from Pop Rising and New Music Friday (daily job) for the music directors -----
+  const DISC_NAMES = { poprising: 'Pop Rising', nmf: 'New Music Friday', nmd: 'New Music Daily' };
+  (C.discovery || []).forEach(([id, title, artist, tags, src]) => {
+    let song = SONGS.get(id) || byKey.get(songKey(title, artist));
+    if (!song) { song = mkSong([id, title, artist, tags || 'pop', 30, 1, 'up', C.weekEnding], 'current', 'disc'); SONGS.set(song.id, song); byKey.set(songKey(title, artist), song); }
+    song.disc = String(src).split(' ').map(x => DISC_NAMES[x] || x).join(' + ');
+  });
+
   // ----- the world: each country's Spotify chart (filled in daily by the chart job → composite.js) -----
   // A song's strength can differ by country; stations outside the US play what's big where they are.
   const W = C.world || { charts: {} };
@@ -268,13 +276,13 @@
     const ranked = mdCandidates(st).slots[slot].filter(x => {
       if (x.known >= 80) return false;
       const age = ageAt(x.s, 2 * c); return age >= 0 && age <= 16;
-    }).map(x => ({ ...x, w: x.a ** 1.6 * (1.25 - x.known / 100) * (0.6 + 0.8 * hash(st.id + x.s.id + ':' + c)) }))
+    }).map(x => ({ ...x, w: x.a ** 1.6 * (1.25 - x.known / 100) * (x.s.disc ? 1.8 : 1) * (0.6 + 0.8 * hash(st.id + x.s.id + ':' + c)) }))
       .sort((p, q) => q.w - p.w);
     return pickDistinct(ranked, 2).map(x => ({ song: x.s, start: 2 * c, day: daysOfWeek(2 * c)[Math.floor(hash(st.id + x.s.id + ':pd') * 7)], role: hash(st.id + x.s.id + ':b' + c) < 0.35 ? 'breakout' : 'test', auto: true }));
   }); }
   function addPicks(st, x) { return memoPick(st.id + ':a' + x, () => {
     const ranked = mdCandidates(st).filter(c => { const age = ageAt(c.s, x); return age >= 1 && age <= 2; })
-      .map(c => ({ ...c, w: c.a ** 2 * (0.5 + hash(st.id + c.s.id + ':a')) })).sort((p, q) => q.w - p.w);
+      .map(c => ({ ...c, w: c.a ** 2 * (c.s.disc ? 1.5 : 1) * (0.5 + hash(st.id + c.s.id + ':a')) })).sort((p, q) => q.w - p.w);
     // each add lands on its own day of the week, so stations add songs day by day
     return pickDistinct(ranked, 3).map(c => ({ song: c.s, start: x, day: daysOfWeek(x)[Math.floor(hash(st.id + c.s.id + ':ad') * 7)], role: 'add', auto: true }));
   }); }

@@ -201,7 +201,7 @@
     const mine = E.custom.songs.filter(s => s.station === st.id && s.kind === 'plant');
     pane.innerHTML = `<p class="lead">Plants are discovery artists ${esc(st.name)} plays before anyone else. Every two weeks the station's music director picks new ones from the library. Most get a few weeks of test spins; the ones it really believes in get pushed into the Top 30.</p>
       ${rep.map(r => `<div class="plant"><div><h4>${esc(r.song.title)}</h4><div class="ar">${esc(r.song.artist)}</div>
-        <div class="stat"><span class="status s-${r.status.split(' ')[0].toLowerCase()}">${esc(r.status)}${r.pos ? ' · #' + r.pos : ''}</span><span>${r.spins} spins this week</span><span>${r.weeksOn} wks in rotation</span>${r.role === 'breakout' && !r.pos ? '<span>Big push</span>' : ''}</div></div>
+        <div class="stat"><span class="status s-${r.status.split(' ')[0].toLowerCase()}">${esc(r.status)}${r.pos ? ' · #' + r.pos : ''}</span><span>${r.spins} spins this week</span><span>${r.weeksOn} wks in rotation</span>${r.song.disc ? `<span>Found on ${esc(r.song.disc)}</span>` : ''}${r.role === 'breakout' && !r.pos ? '<span>Big push</span>' : ''}</div></div>
         ${spark(r.trail, st.color)}
         <button class="btn btn-ghost play" data-play="${esc(r.song.id)}" data-cat="plants">▶ Play</button></div>`).join('')}
       ${mine.length ? `<div class="sec" style="margin-top:18px"><h3>Your plants</h3><ul class="gold">${mine.map(s => `<li data-play="${esc(s.id)}" data-cat="plants"><div><b>${esc(s.title)}</b><span>${esc(s.artist)}</span></div><span class="yr">▶</span></li>`).join('')}</ul></div>` : ''}`;
