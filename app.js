@@ -69,8 +69,11 @@
 
   // ---------------- station list ----------------
   function renderDial() {
-    $('#dialList').innerHTML = E.STATIONS.map(st => `<li><button data-st="${st.id}" style="--c:${st.color}"><span class="sw"></span>
-      <span><span class="nm">${esc(st.name)}${st.custom ? ' <span class="badge plant">YOURS</span>' : ''}</span><br><span class="ct">${esc(st.city)}, ${esc(st.state)}</span></span><span class="fq">${esc(st.call)}</span></button></li>`).join('')
+    const item = (st) => `<li><button data-st="${st.id}" style="--c:${st.color}"><span class="sw"></span>
+      <span><span class="nm">${esc(st.name)}${st.custom ? ' <span class="badge plant">YOURS</span>' : ''}</span><br><span class="ct">${esc(st.city)}, ${esc(st.state)}</span></span><span class="fq">${esc(st.call)}</span></button></li>`;
+    const us = E.STATIONS.filter(st => E.inScope(st, 'us')), world = E.STATIONS.filter(st => E.inScope(st, 'world'));
+    $('#dialList').innerHTML = `<li class="dialhead">United States · ${us.length}</li>` + us.map(item).join('')
+      + (world.length ? `<li class="dialhead">Around the world · ${world.length}</li>` + world.map(item).join('') : '')
       + `<li><button data-build="1" style="--c:#eef1f7"><span class="sw"></span><span><span class="nm">Build a station</span><br><span class="ct">Put your own station on the map</span></span><span class="fq">＋</span></button></li>`
       + `<li><button data-sync="1" style="--c:#2ee6c8"><span class="sw"></span><span><span class="nm">Sync across devices</span><br><span class="ct">Your stations on every browser</span></span><span class="fq">⇄</span></button></li>`;
   }
@@ -204,11 +207,27 @@
     bindPlay(pane, st);
   }
 
+  // Share a station built in the app: opens a ready-to-send request on the site's GitHub page.
+  // The site owner's own requests go on the air right away; others go on once the owner approves them.
+  function siteRepo() {
+    if (window.RADIO_CONFIG?.repo) return window.RADIO_CONFIG.repo;
+    const m = location.hostname.match(/^([\w-]+)\.github\.io$/);
+    return m ? `${m[1]}/${location.pathname.split('/').filter(Boolean)[0] || m[1] + '.github.io'}` : null;
+  }
+  function shareStation(st) {
+    const repo = siteRepo();
+    if (!repo) { toast('Sharing works on the published site.'); return; }
+    const code = JSON.stringify(window.RadioBuilder.exportable(st));
+    const body = `**${st.name}**, ${st.city}${st.state ? ', ' + st.state : ''}\n${st.slogan || ''}\n\nJust press **Submit new issue** below. The station goes on the air for everyone once it's approved.\n\n\`\`\`json\n${code}\n\`\`\`\n`;
+    const url = `https://github.com/${repo}/issues/new?title=${encodeURIComponent('Station: ' + st.name + ' (' + st.city + ')')}&body=${encodeURIComponent(body)}`;
+    window.open(url, '_blank', 'noopener');
+  }
+
   function paneAbout(st, pane) {
     const gold = E.goldFor(st);
     const mine = E.custom.songs.filter(s => s.station === st.id);
     pane.innerHTML = `
-      ${st.custom ? `<div class="sec mineactions"><button class="btn btn-main" id="stEdit">Edit station</button><button class="btn btn-ghost" id="stCopy">Copy station code</button><button class="btn btn-ghost" id="stDel">Delete</button></div>` : ''}
+      ${st.custom ? `<div class="sec mineactions">${st.synced || st.by ? '<span class="chip">On the air for everyone</span>' : '<button class="btn btn-main" id="stShare">Share with everyone</button>'}<button class="btn btn-ghost" id="stEdit">Edit station</button><button class="btn btn-ghost" id="stCopy">Copy station code</button><button class="btn btn-ghost" id="stDel">Delete</button></div>` : ''}
       <div class="sec"><h3>About the station</h3><p>${esc(st.about || 'A station you built.')}</p></div>
       <div class="sec"><h3>Throwbacks in rotation (${gold.length})</h3><ul class="gold">${gold.slice(0, 25).map(g => `<li data-play="${esc(g.id)}" data-cat="gold"><div><b>${esc(g.title)}</b><span>${esc(g.artist)}</span></div><span class="yr">${g.year}</span></li>`).join('')}</ul></div>
       <div class="sec import"><h3>Add songs to this station</h3>
@@ -221,6 +240,7 @@
     $('#impGo').addEventListener('click', () => importSongs(st));
     if (st.custom) {
       $('#stEdit').addEventListener('click', () => go('build-' + st.id));
+      $('#stShare')?.addEventListener('click', () => shareStation(st));
       $('#stCopy').addEventListener('click', () => {
         const code = JSON.stringify(window.RadioBuilder.exportable(st));
         navigator.clipboard?.writeText(code).then(() => toast('Station code copied'), () => toast('Copy failed'));
@@ -273,17 +293,26 @@
   // ---------------- network panel ----------------
   function renderNetwork() {
     const p = $('#panel'); p.hidden = false; p.style.setProperty('--c', '#2ee6c8');
-    const comp = state.netView === 'composite';
+    const comp = state.netView === 'composite', world = state.netView === 'world';
+    const scope = world ? 'world' : 'us';
+    const scoped = E.STATIONS.filter(st => E.inScope(st, scope));
     const C = E.COMPOSITE;
-    $('#panelBody').innerHTML = `<div class="net"><div class="hero"><div class="hero-top"><div class="logo">${comp ? '50' : '40'}<small>${comp ? 'US NEW' : 'NETWORK'}</small></div>
-      <div><h2>${comp ? esc(C.title || 'US New Music Chart') : 'Network Top 40'}</h2><div class="sub"><b>${comp ? 'Streaming + playlists + radio' : 'All ' + E.STATIONS.length + ' stations'}</b> · ${comp ? 'your composite chart' : 'total weekly spins'}</div></div></div>
+    $('#panelBody').innerHTML = `<div class="net"><div class="hero"><div class="hero-top"><div class="logo">${comp ? '50' : '40'}<small>${comp ? 'US NEW' : world ? 'WORLD' : 'NETWORK'}</small></div>
+      <div><h2>${comp ? esc(C.title || 'US New Music Chart') : world ? 'World Top 40' : 'Network Top 40'}</h2><div class="sub"><b>${comp ? 'Streaming + playlists' : `All ${scoped.length} ${world ? 'stations around the world' : 'US stations'}`}</b> · ${comp ? 'your composite chart' : 'total weekly spins'}</div></div></div>
       <div class="tabs" role="tablist" style="margin-top:14px">
-        <button role="tab" data-net="network" aria-selected="${!comp}">Network Top 40</button>
+        <button role="tab" data-net="network" aria-selected="${!comp && !world}">Network Top 40</button>
+        <button role="tab" data-net="world" aria-selected="${world}">World Top 40</button>
         <button role="tab" data-net="composite" aria-selected="${comp}">US New Music Chart</button>
       </div></div></div>
       <div class="tabpane" id="tabpane"></div>`;
     $('.net .tabs').addEventListener('click', e => { const b = e.target.closest('[data-net]'); if (b) { state.netView = b.dataset.net; renderNetwork(); } });
     const pane = $('#tabpane');
+    // adding up every station's week takes a moment the first time: show that, then draw
+    if (!comp && !E.networkReady?.(state.week, scope)) {
+      pane.innerHTML = '<p class="lead" style="padding:20px 4px">Counting this week\'s spins…</p>';
+      setTimeout(() => { if (state.view === 'network') { E.networkChart(state.week, scope); renderNetwork(); } }, 30);
+      return;
+    }
     if (comp) {
       const rows = E.compositeChart();
       pane.innerHTML = `<div class="weekbar"><div class="wk" style="flex:1">${C.updated ? 'Updated ' + esc(fmtDate(new Date(C.updated + 'T12:00:00Z'))) : 'Week ending ' + esc(fmtDate(new Date(C.weekEnding + 'T12:00:00Z')))}<small>${esc(C.updated ? 'Rebuilt every day from ' + (C.status || '').split(' · ').slice(1).join(' · ') : C.status || '')}</small></div></div>
@@ -300,14 +329,14 @@
       }));
       return;
     }
-    const rows = E.networkChart(state.week);
+    const rows = E.networkChart(state.week, scope);
     const open = state.netOpen || (state.netOpen = new Set());
     const detail = (e) => {
       const max = e.by[0]?.spins || 1;
       const ones = e.by.filter(b => b.pos === 1).length;
       const delta = (b) => { const d = b.spins - b.lw; return b.lw === 0 ? '<span class="dn new">new</span>' : d === 0 ? '<span class="dn">±0</span>' : `<span class="dn ${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}</span>`; };
       return `<div class="netd" id="nd-${esc(e.song.id)}">
-        <p class="netsum">Played on <b>${e.plays}</b> of ${E.STATIONS.length} stations · in the Top 30 on <b>${e.stations}</b>${ones ? ` · <b>#1</b> on ${ones}` : ''} · ${e.spins.toLocaleString()} spins (${e.spinsLW ? (e.spins >= e.spinsLW ? '+' : '') + (e.spins - e.spinsLW).toLocaleString() + ' vs last week' : 'new this week'})</p>
+        <p class="netsum">Played on <b>${e.plays}</b> of ${scoped.length} stations · in the Top 30 on <b>${e.stations}</b>${ones ? ` · <b>#1</b> on ${ones}` : ''} · ${e.spins.toLocaleString()} spins (${e.spinsLW ? (e.spins >= e.spinsLW ? '+' : '') + (e.spins - e.spinsLW).toLocaleString() + ' vs last week' : 'new this week'})</p>
         <ul class="bars">${e.by.map(b => `<li>
           <a href="#station-${esc(b.st.id)}" class="bst" style="--c:${esc(b.st.color)}"><span class="sw"></span>${esc(b.st.name)}<small>${esc(b.st.city)}</small></a>
           <span class="bar"><i style="width:${Math.max(3, Math.round(b.spins / max * 100))}%;background:${esc(b.st.color)}"></i></span>
@@ -322,7 +351,7 @@
         <button class="row ${e.pos <= 3 ? 'top3' : ''}" style="--c:#2ee6c8" data-net-toggle="${esc(e.song.id)}" aria-expanded="${open.has(e.song.id)}" aria-controls="nd-${esc(e.song.id)}">
           <span class="pos">${e.pos}</span><span class="mv ${moveCls(e.move)}">${esc(e.move === '=' ? '–' : e.move)}</span>
           <span class="ti"><b>${esc(e.song.title)}</b><span>${esc(e.song.artist)}</span></span>
-          <span class="st"><b>${e.spins.toLocaleString()}</b>${e.bullet ? '<span class="badge bul">●</span>' : ''} spins<br>${e.stations}/${E.STATIONS.length} stations · PK ${e.pk} <span class="chev">▾</span></span>
+          <span class="st"><b>${e.spins.toLocaleString()}</b>${e.bullet ? '<span class="badge bul">●</span>' : ''} spins<br>${e.stations}/${scoped.length} stations · PK ${e.pk} <span class="chev">▾</span></span>
         </button>
         ${open.has(e.song.id) ? detail(e) : ''}
       </li>`).join('')}</ol><p class="legend">Tap a song to see every station playing it: spins this week, the change from last week, and its position on that station's Top 30 ("rot." means in rotation but outside the Top 30).
@@ -573,7 +602,7 @@
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   window.RadioApp = { map, go, toast, esc, store, addMarker, removeMarker, renderDial, markers, nowWeek: NOW,
-    onEnded, liveCheck, current: () => state.playing, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
+    shareStation, onEnded, liveCheck, current: () => state.playing, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
     // the next songs after the current one, so a phone's Spotify app can keep playing in the background
     upNext: (n) => state.mode === 'live' && state.station ? LIVE().upcoming(state.station, n + 1).map(i => i.song.id) : state.cd.map(c => c.song.id).slice(0, n),
     replay: () => { if (!state.station) return; if (state.mode === 'live') goLive(); else if (state.playing) playSong(state.playing, state.playingCat); },

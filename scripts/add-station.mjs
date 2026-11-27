@@ -18,11 +18,14 @@ const num = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n <
 
 const name = text(st.name, 40), city = text(st.city, 40);
 if (!name || !city) fail('The station needs a name and a city.');
-const lat = num(st.lat, 17, 72), lon = num(st.lon, -180, -60);           // the US, Alaska and Hawaii included
-const call = text(st.call, 4).toUpperCase();
-if (!/^[KW][A-Z]{2,3}$/.test(call)) fail('Call letters must be 3–4 letters starting with K or W.');
+const lat = num(st.lat, -60, 75), lon = num(st.lon, -180, 180);
+const country = /^[a-z]{2}$/.test(st.country || '') ? st.country : 'us';
+const call0 = text(st.call, 6).toUpperCase();
+const call = country === 'us' ? call0.slice(0, 4) : call0;
+const call6 = call0;
+if (country === 'us' ? !/^[KW][A-Z]{2,3}$/.test(call) : !/^[A-Z0-9]{2,6}$/.test(call6)) fail(country === 'us' ? 'Call letters must be 3–4 letters starting with K or W.' : 'The station code needs 2–6 letters or numbers.');
 const freq = String(st.freq || '').split(' ')[0];
-if (!/^(8[89]|9\d|10[0-7])\.\d$/.test(freq)) fail('The frequency must be on the FM dial (88.1–107.9).');
+if (!/^(7[6-9]|8\d|9\d|10[0-7])\.\d$/.test(freq)) fail('The frequency must be on the FM dial.');
 const color = /^#[0-9a-f]{6}$/i.test(st.color) ? st.color : '#2ee6c8';
 const TAGS = ['pop', 'dance', 'rnb', 'indie', 'alt', 'latin', 'country', 'kpop', 'rap'];
 const tags = Object.fromEntries(TAGS.map(t => [t, +num(st.tags?.[t] ?? 1, 0, 3).toFixed(2)]));
@@ -42,6 +45,7 @@ const clean = {
   id, name, slogan: text(st.slogan, 60), city, state: text(st.state, 2).toUpperCase(), lat, lon, call, freq, color, tags,
   nb: num(st.nb ?? 0.35, 0, 1), clean: !!st.clean, home: (Array.isArray(st.home) ? st.home : []).slice(0, 6).map(h => text(h, 40)).filter(Boolean),
   about: text(st.about, 400), shows: [], plants, tz: text(st.tz, 40) || undefined, by: author || undefined,
+  ...(country !== 'us' ? { country, lang: text(st.lang, 10) || 'en', brand: !!st.brand } : {}),
 };
 const i = data.stations.findIndex(s => s.id === id);
 if (i >= 0) data.stations[i] = clean; else data.stations.push(clean);

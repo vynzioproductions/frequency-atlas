@@ -14,6 +14,9 @@ window.RADIO_CONFIG = {
   // can be looked up on the spot. The free player works without it. See README → "YouTube player".
   youtubeApiKey: '',
 
+  // Where "Share with everyone" sends stations (owner/repo). Worked out from the site address if left blank.
+  repo: '',
+
   appName: 'Frequency Atlas',
   appleStorefront: 'us',
 };

@@ -38,7 +38,11 @@
     const open = FREQS.filter(f => +f >= 92 && !taken.has(f));
     return open[Math.floor(Math.random() * open.length)] || '99.9';
   }
-  function tzFor(lat, lon, state) {
+  function tzFor(lat, lon, state, country) {
+    if (country && country !== 'us') {           // outside the US: the time zone from the longitude
+      const h = Math.round(lon / 15);
+      return h === 0 ? 'Etc/GMT' : `Etc/GMT${h > 0 ? '-' : '+'}${Math.abs(h)}`;
+    }
     const s = String(state).toUpperCase();
     if (s === 'AZ') return 'America/Phoenix';
     if (s === 'HI') return 'Pacific/Honolulu';
@@ -72,9 +76,12 @@
       if (!r.ok) return;
       const j = await r.json(), a = j.address || {};
       const city = a.city || a.town || a.village || a.hamlet || a.county || '';
+      const cc = (a.country_code || 'us').toLowerCase();
       const code = (a['ISO3166-2-lvl4'] || '').split('-')[1] || '';
+      draft.country = cc; draft.lang = window.RadioAuto.langFor(cc);
       if (city && !draft.cityTouched) draft.city = city;
-      if (code && !draft.stateTouched) draft.state = code;
+      // US and Canadian stations show the state or province; elsewhere, the country
+      if (!draft.stateTouched) draft.state = cc === 'us' || cc === 'ca' || cc === 'au' ? code : (a.country || code);
     } catch { /* offline or blocked: user types the city */ }
   }
 
@@ -179,7 +186,7 @@
           <label class="fld"><span>Slogan</span><input id="bSlogan" maxlength="48" placeholder="Flagstaff's New Music" value="${esc(d.slogan)}"></label>
           <label class="fld"><span>City</span><input id="bCity" maxlength="32" value="${esc(d.city)}"></label>
           <label class="fld"><span>State</span><input id="bState" maxlength="2" value="${esc(d.state)}" style="text-transform:uppercase"></label>
-          <label class="fld"><span>Call letters</span><div class="row2"><input id="bCall" maxlength="4" value="${esc(d.call)}" style="text-transform:uppercase"><button class="ic" id="bCallDice" title="Suggest call letters" aria-label="Suggest call letters">↻</button></div><small id="bCallHint"></small></label>
+          <label class="fld"><span>Call letters</span><div class="row2"><input id="bCall" maxlength="6" value="${esc(d.call)}" style="text-transform:uppercase"><button class="ic" id="bCallDice" title="Suggest call letters" aria-label="Suggest call letters">↻</button></div><small id="bCallHint"></small></label>
           <label class="fld"><span>Frequency (FM)</span><select id="bFreq">${FREQS.map(f => `<option ${f === d.freq ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
         </div>
         <div class="fld"><span>Color</span><div class="swatches">${COLORS.map(c => `<button class="swb" data-color="${c}" style="--c:${c}" aria-label="Color ${c}" aria-pressed="${c === d.color}"></button>`).join('')}<input type="color" id="bColor" value="${esc(d.color)}" aria-label="Custom color"></div></div>
@@ -220,7 +227,7 @@
     upd('#bName', 'name'); upd('#bSlogan', 'slogan'); upd('#bAbout', 'about');
     upd('#bCity', 'city'); upd('#bState', 'state', v => v.toUpperCase());
     $('#bCity').addEventListener('input', () => { d.cityTouched = true; }); $('#bState').addEventListener('input', () => { d.stateTouched = true; });
-    upd('#bCall', 'call', v => v.toUpperCase().replace(/[^A-Z]/g, ''));
+    upd('#bCall', 'call', v => v.toUpperCase().replace(/[^A-Z0-9]/g, ''));
     upd('#bHome', 'home', v => v.split(',').map(s => s.trim()).filter(Boolean));
     $('#bFreq').addEventListener('change', e => { d.freq = e.target.value; refresh(); });
     $('#bCallDice').addEventListener('click', e => { e.preventDefault(); d.call = suggestCall(d.lon); $('#bCall').value = d.call; refresh(); });
@@ -292,14 +299,16 @@
     if (!d.placed) errs.push('click the map to place the station');
     if (!d.name.trim()) errs.push('give it a name');
     if (!d.city.trim()) errs.push('add the city');
-    if (!/^[KW][A-Z]{2,3}$/.test(d.call)) errs.push('call letters must be K or W plus 2–3 letters');
+    if (!d.country || d.country === 'us') { if (!/^[KW][A-Z]{2,3}$/.test(d.call)) errs.push('call letters must be K or W plus 2–3 letters'); }
+    else if (!/^[A-Z0-9]{2,6}$/.test(d.call)) errs.push('call letters (or a short station code) need 2–6 letters or numbers');
     if (E.STATIONS.some(s => s.call === d.call && s.id !== d.id)) errs.push(`${d.call} is already taken`);
     return errs;
   }
 
   function exportable(st) {
-    const { id, name, slogan, city, state, lat, lon, call, freq, color, tags, nb, clean, home, about, shows, plants, tz } = st;
-    return { id, name, slogan, city, state, lat, lon, call, freq: String(freq).split(' ')[0], color, tags, nb, clean: !!clean, home, about, shows, plants, tz };
+    const { id, name, slogan, city, state, lat, lon, call, freq, color, tags, nb, clean, home, about, shows, plants, tz, country, lang, brand } = st;
+    return { id, name, slogan, city, state, lat, lon, call, freq: String(freq).split(' ')[0], color, tags, nb, clean: !!clean, home, about, shows, plants, tz,
+      ...(country && country !== 'us' ? { country, lang, brand: !!brand } : {}) };
   }
 
   function save() {
@@ -311,14 +320,17 @@
       id, custom: true, name: d.name.trim(), slogan: d.slogan.trim() || `${d.city}'s New Music`, city: d.city.trim(), state: (d.state || '').trim().toUpperCase(),
       lat: d.lat, lon: d.lon, call: d.call, freq: d.freq + ' FM', color: d.color, tags: { ...d.tags }, nb: d.nb, clean: d.clean, home: d.home,
       about: d.about.trim(), shows: [], plants: d.plants, gold: [],
-      tz: tzFor(d.lat, d.lon, d.state), launched: new Date().getFullYear(),
+      tz: tzFor(d.lat, d.lon, d.state, d.country), launched: new Date().getFullYear(),
+      ...(d.country && d.country !== 'us' ? { country: d.country, lang: d.lang, brand: !!d.brand } : {}),
     };
+    const wasEditing = !!editing;
     E.addStation(st); window.RadioLive?.clearCache(id);
     const saved = A.store.get('stations', []).filter(s => s.id !== id);
     saved.push(exportable(st)); A.store.set('stations', saved);
     close();
     A.addMarker(st); A.renderDial();
-    A.toast(`${st.name} is on the air`);
+    if (wasEditing) A.toast(`${st.name} is updated`);
+    else A.toast(`${st.name} is on the air on this device`, 'Share with everyone', () => A.shareStation(st));
     A.go('station-' + id);
   }
 

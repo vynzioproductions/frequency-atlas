@@ -146,3 +146,25 @@ Every station picks its own music each week, the same for everyone (`engine.js` 
 Every station's Top 30 can be browsed back to the week ending January 2, 2026. Songs that were big earlier in 2026 but have left today's charts come from `history.js` (Billboard Hot 100 top-ten singles of 2026, via Wikipedia), shaped from their real top-ten entry and peak dates. Their Spotify IDs are looked up by the daily job; until a song has one, it plays only through YouTube. To add more 2026 hits, add rows to `history.js`.
 
 Spin counts are simulated: the model turns real chart data (positions, dates, sources) into each station's spins, so they're realistic in shape but not real airplay.
+
+## Sharing stations with everyone
+
+A station built in the app lives on that device until it's shared. **Share with everyone** (on the station's Station tab, or right after you build it) opens a ready-made request on the site's GitHub page; the person just presses **Submit new issue** (they need a free GitHub account).
+- **Your own** requests go on the air automatically within a minute or two.
+- **Other people's** wait for you: open the request on GitHub and add the label **approved** (create that label once under Issues → Labels). The station is added to `stations.json` and the request is closed with a note.
+- To take a shared station down, delete it from `stations.json`.
+
+Needs `.github/workflows/stations.yml` and `scripts/add-station.mjs` in the repo.
+
+## Around the world (52 cities)
+
+Stations in 52 cities outside the US (`country` in data.js). Each plays mostly what's big in its own country:
+- The daily job also reads each country's Spotify daily chart (top 60 for 33 countries) into `composite.js → world`. A song's strength is set country by country; American hits play abroad at a lower level unless they chart there too, and songs that are only big abroad never reach US stations.
+- **World Top 40** (in the Network panel) adds up the stations abroad; **Network Top 40** stays the US stations.
+- Call letters follow local custom where stations use them on air (Canada C…, Mexico XH…, Japan JO…, Korea HL…, Philippines DW…, Brazil ZY…, Australia number + letters, and so on). Elsewhere stations go by name, and their legal IDs say the name instead of spelling letters.
+- Stations in Spanish, Portuguese, French, German and Italian-speaking cities do their IDs in that language when the device has a voice for it.
+- The builder works anywhere: outside the US it uses that country's call letter style and leans toward the music the country is known for.
+
+## Don't upload these files by hand
+
+The jobs write `composite.js`, `composite-history.json`, `yt.js`, `auto.js`, `library.js` and `durations.js`. Uploading an older copy over them throws away their work (YouTube matches, chart history), so the update zips leave them out.

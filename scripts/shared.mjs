@@ -79,7 +79,7 @@ export function songKey(title, artist) {
   return t + '|' + a;
 }
 
-const HOLIDAY = /christmas|xmas|santa|jingle|sleigh|mistletoe|snowman|let it snow|feliz navidad|holiday|reindeer|navidad|winter wonderland|silent night|noel|underneath the tree|rockin' around|last christmas|white christmas|frosty|little drummer/i;
+const HOLIDAY = /christmas|xmas|santa|jingle|sleigh|mistletoe|snowman|let it snow|feliz navidad|holiday|reindeer|navidad|winter wonderland|silent night|noel|underneath the tree|rockin' around|last christmas|white christmas|frosty|little drummer|most wonderful time|deck the halls|o holy night|joy to the world|carol of the bells|hark the herald|merry|we wish you/i;
 export const isHoliday = (title) => HOLIDAY.test(title);
 
 export function parseCSV(text) {
@@ -123,4 +123,19 @@ export function hash(s) {
   let x = 2166136261;
   for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); }
   return (x >>> 0) / 4294967296;
+}
+
+// Release date of a Spotify track (YYYY-MM-DD) from its public embed page; null if it can't be read.
+export async function releaseOf(id) {
+  try {
+    const r = await fetch(`https://open.spotify.com/embed/track/${id}`, { headers: { 'user-agent': 'Mozilla/5.0 (frequency-atlas chart bot)' } });
+    if (!r.ok) return null;
+    const html = await r.text();
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return null;
+    const find = (o, d = 0) => { if (!o || typeof o !== 'object' || d > 12) return undefined; if ('releaseDate' in o) return o.releaseDate; for (const v of Object.values(o)) { const f = find(v, d + 1); if (f !== undefined) return f; } };
+    const rd = find(JSON.parse(m[1]));
+    const iso = typeof rd === 'string' ? rd : rd?.isoString;
+    return iso ? iso.slice(0, 10) : null;
+  } catch { return null; }
 }

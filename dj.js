@@ -23,14 +23,38 @@
   const base = (st) => st.name.replace(/^the /i, '').replace(/\s*[\d.]+(\s*fm)?$/i, '').trim();
   function chartName(st) { return base(st) + ' 30'; }
   const spell = (call) => call.split('').join(' ');                 // "K S G R" so voices don't read it as a word
-  const dial = (st) => st.freq.split(' ')[0].replace('.', ' point ');
+  const dial = (st) => st.freq.split(' ')[0].replace('.', ` ${speaksLocal(st) ? T(st).point : 'point'} `);
+
+  // ---------- languages ----------
+  // Stations in Spanish, Portuguese, French, German and Italian-speaking cities do their IDs in that
+  // language (if the device has a voice for it); everywhere else uses English, as many stations there do.
+  const L10N = {
+    es: { listening: (n) => `Estás escuchando ${n}.`, newOn: (n) => `Lo nuevo, en ${n}.`, first: (n) => `Primero en ${n}.`, discovery: (n) => `${n} te lo presentó primero.`, throwback: (n) => `Un clásico en ${n}.`, back: (y, n) => `Regresamos a ${y}. ${n}.`, biggest: (n, c) => `${n}. Lo más grande de ${c}.`, cdOpen: (c, n) => `El ${c}. Lo más escuchado esta semana en ${n}, del treinta al uno.`, num: (p) => `Número ${p}.`, numNew: (p) => `Número ${p}. Nuevo esta semana.`, one: 'Y la número uno de la semana.', cdClose: (c, n) => `Eso fue el ${c}. ${n}.`, point: 'punto' },
+    pt: { listening: (n) => `Você está ouvindo ${n}.`, newOn: (n) => `Novidade na ${n}.`, first: (n) => `Primeiro na ${n}.`, discovery: (n) => `Você ouviu primeiro na ${n}.`, throwback: (n) => `Relembrando na ${n}.`, back: (y, n) => `De volta a ${y}. ${n}.`, biggest: (n, c) => `${n}. Os maiores sucessos de ${c}.`, cdOpen: (c, n) => `${c}. As mais tocadas da semana na ${n}, da trinta à um.`, num: (p) => `Número ${p}.`, numNew: (p) => `Número ${p}. Novidade da semana.`, one: 'E a número um da semana.', cdClose: (c, n) => `Esse foi o ${c}. ${n}.`, point: 'ponto' },
+    fr: { listening: (n) => `Vous écoutez ${n}.`, newOn: (n) => `Nouveauté sur ${n}.`, first: (n) => `D'abord sur ${n}.`, discovery: (n) => `Découverte ${n}.`, throwback: (n) => `Un classique sur ${n}.`, back: (y, n) => `Retour en ${y}. ${n}.`, biggest: (n, c) => `${n}. Les plus gros tubes de ${c}.`, cdOpen: (c, n) => `Le ${c}. Les titres les plus joués cette semaine sur ${n}, de trente à un.`, num: (p) => `Numéro ${p}.`, numNew: (p) => `Numéro ${p}. Nouveau cette semaine.`, one: 'Et le numéro un de la semaine.', cdClose: (c, n) => `C'était le ${c}. ${n}.`, point: 'point' },
+    de: { listening: (n) => `Du hörst ${n}.`, newOn: (n) => `Neu auf ${n}.`, first: (n) => `Zuerst auf ${n}.`, discovery: (n) => `${n} Entdeckung.`, throwback: (n) => `Ein Klassiker auf ${n}.`, back: (y, n) => `Zurück ins Jahr ${y}. ${n}.`, biggest: (n, c) => `${n}. Die größten Hits in ${c}.`, cdOpen: (c, n) => `Die ${c}. Die meistgespielten Songs der Woche auf ${n}, von dreißig bis eins.`, num: (p) => `Platz ${p}.`, numNew: (p) => `Platz ${p}. Neu in dieser Woche.`, one: 'Und die Nummer eins der Woche.', cdClose: (c, n) => `Das waren die ${c}. ${n}.`, point: 'Komma' },
+    it: { listening: (n) => `State ascoltando ${n}.`, newOn: (n) => `Novità su ${n}.`, first: (n) => `Prima su ${n}.`, discovery: (n) => `Scoperta di ${n}.`, throwback: (n) => `Un classico su ${n}.`, back: (y, n) => `Torniamo al ${y}. ${n}.`, biggest: (n, c) => `${n}. Le hit più grandi di ${c}.`, cdOpen: (c, n) => `La ${c}. I brani più suonati della settimana su ${n}, dal trenta all'uno.`, num: (p) => `Numero ${p}.`, numNew: (p) => `Numero ${p}. Nuova questa settimana.`, one: 'E il numero uno della settimana.', cdClose: (c, n) => `Questa era la ${c}. ${n}.`, point: 'punto' },
+  };
+  const langOf = (st) => String(st.lang || 'en').slice(0, 2).toLowerCase();
+  const T = (st) => L10N[langOf(st)] || null;
 
   // ---------- one imaging voice per station ----------
-  let voices = [];
-  const loadVoices = () => { try { voices = speechSynthesis.getVoices().filter(v => /^en(-|_|$)/i.test(v.lang)); } catch { voices = []; } };
+  let voices = [], allVoices = [];
+  const loadVoices = () => { try { allVoices = speechSynthesis.getVoices(); voices = allVoices.filter(v => /^en(-|_|$)/i.test(v.lang)); } catch { voices = []; } };
   if ('speechSynthesis' in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+  // a station speaks its own language only if this device has a voice for it
+  const speaksLocal = (st) => { if (!T(st)) return false; if (!allVoices.length) loadVoices(); return allVoices.some(v => v.lang.toLowerCase().startsWith(langOf(st))); };
   function voiceFor(st) {
     if (!voices.length) loadVoices();
+    if (speaksLocal(st)) {
+      const want = String(st.lang).toLowerCase().replace('_', '-');
+      const local = allVoices.filter(v => v.lang.toLowerCase().replace('_', '-') === want);
+      const pool = local.length ? local : allVoices.filter(v => v.lang.toLowerCase().startsWith(langOf(st)));
+      return { voice: pool[Math.floor(E.hash(st.id + 'voice') * pool.length)], pitch: 0.8 + E.hash(st.id + 'p') * 0.18, rate: 0.95 + E.hash(st.id + 'r') * 0.08 };
+    }
+    // English-speaking countries get a voice with their accent when the device has one
+    const accent = st.lang && langOf(st) === 'en' ? voices.filter(v => v.lang.replace('_', '-').toLowerCase() === st.lang.toLowerCase()) : [];
+    if (accent.length) return { voice: accent[Math.floor(E.hash(st.id + 'voice') * accent.length)], pitch: 0.75 + E.hash(st.id + 'p') * 0.2, rate: 0.93 + E.hash(st.id + 'r') * 0.1 };
     const good = voices.filter(v => /natural|neural|premium|enhanced|google|daniel|aaron|arthur|alex|fred|guy|davis|tom|samantha|aria|jenny|karen/i.test(v.name));
     const pool = good.length >= 2 ? good : voices;
     return { voice: pool.length ? pool[Math.floor(E.hash(st.id + 'voice') * pool.length)] : null, pitch: 0.72 + E.hash(st.id + 'p') * 0.22, rate: 0.92 + E.hash(st.id + 'r') * 0.1 };
@@ -101,28 +125,40 @@
 
   // ---------- ID scripts ----------
   function legalId(st) {
+    // most countries outside the Americas, Japan, Korea, the Philippines and Australia don't use call letters on air
+    if (st.brand) return pick([`${st.name}. ${st.city}.`, `${st.name}, ${st.city}. ${st.slogan}.`, `${base(st)}. ${dial(st)}. ${st.city}.`]);
     return pick([`${spell(st.call)}, ${st.city}.`, `${spell(st.call)} ${st.city}. ${st.name}.`, `This is ${spell(st.call)}, ${st.city}, ${st.state}.`]);
   }
   function positioner(st) {
+    if (speaksLocal(st)) { const t = T(st); return pick([`${st.name}. ${st.slogan}.`, `${base(st)}, ${dial(st)}. ${st.slogan}.`, t.listening(st.name), t.first(st.name)]); }
     const lines = [`${st.name}. ${st.slogan}.`, `${base(st)}, ${dial(st)}. ${st.slogan}.`, `${st.city}'s ${base(st)}. ${dial(st)}.`, `You're listening to ${st.name}.`];
     if (st.nb >= 0.35) lines.push(`${st.name}. Hear the new music first.`, `New music first. ${st.name}.`);
     if (st.clean) lines.push(`${st.name}. All the hits, always clean.`);
     return pick(lines);
   }
   function sweeper(st, cat, song) {
+    if (speaksLocal(st)) {
+      const t = T(st);
+      if (cat === 'plants') return t.discovery(st.name);
+      if (cat === 'adds') return pick([t.newOn(st.name), t.first(st.name)]);
+      if (cat === 'gold') return song?.year && song.year <= new Date().getFullYear() - 3 ? t.back(song.year, st.name) : t.throwback(st.name);
+      if (cat === 'power') return t.biggest(st.name, st.city);
+      return positioner(st);
+    }
     if (cat === 'plants') return pick([`${base(st)} discovery. Remember where you heard it first.`, `Brand new artist, first on ${st.name}.`, `${st.name} discovery.`]);
     if (cat === 'adds') return pick([`Brand new on ${st.name}.`, `First listen. ${st.name}.`, `New music, ${st.name}.`]);
     if (cat === 'gold') return pick([`${base(st)} throwback.`, `Throwback on ${st.name}.`, song?.year && song.year <= new Date().getFullYear() - 3 ? `Back to ${song.year}. ${st.name}.` : `${st.name}. The throwback.`]);
     if (cat === 'power') return pick([`${st.name}. The biggest songs in ${st.city}.`, `${base(st)} power rotation.`]);
     return positioner(st);
   }
-  function countdownOpen(st) { return `The ${chartName(st)}. The biggest songs on ${st.name} this week, counting down from thirty.`; }
-  function countdownDrop(row) {
-    if (row.pos === 1) return 'And the number one song this week.';
-    if (row.move === 'NEW') return `Number ${row.pos}. New this week.`;
-    return `Number ${row.pos}.`;
+  function countdownOpen(st) { return speaksLocal(st) ? T(st).cdOpen(chartName(st), st.name) : `The ${chartName(st)}. The biggest songs on ${st.name} this week, counting down from thirty.`; }
+  function countdownDrop(row, st) {
+    const t = st && speaksLocal(st) ? T(st) : null;
+    if (row.pos === 1) return t ? t.one : 'And the number one song this week.';
+    if (row.move === 'NEW') return t ? t.numNew(row.pos) : `Number ${row.pos}. New this week.`;
+    return t ? t.num(row.pos) : `Number ${row.pos}.`;
   }
-  function countdownClose(st) { return `That's the ${chartName(st)}. ${st.name}.`; }
+  function countdownClose(st) { return speaksLocal(st) ? T(st).cdClose(chartName(st), st.name) : `That's the ${chartName(st)}. ${st.name}.`; }
 
   window.RadioDJ = { TZ, seeded, say, sting, legalId, positioner, sweeper, countdownOpen, countdownDrop, countdownClose, chartName, localTime, unlock: audio };
 }

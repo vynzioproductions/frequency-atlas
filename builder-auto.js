@@ -90,6 +90,12 @@
       if (COUNTRY.includes(st) && name === 'Country pop') x *= 2.2;
       if (INDIE.includes(st) && (name === 'Indie' || name === 'Alt pop')) x *= 2;
       if (RHYTHM.includes(st) && name === 'Rhythmic') x *= 2;
+      const cc = d.country || 'us';
+      if (cc !== 'us') {
+        if (LATIN_CC.has(cc) && name === 'Latin pop') x *= 3;
+        if (ASIA_POP.has(cc) && name === 'K-pop') x *= 5;
+        if (!LATIN_CC.has(cc) && name === 'Country pop') x *= 0.3;
+      }
       // stand out from stations nearby
       near.forEach(s => { if (tagDist(s.tags, f.tags) < 2.2) x *= 0.45; });
       // a description steers hard
@@ -125,12 +131,27 @@
     for (const [x, v] of pool) { r -= v; if (r <= 0) return x; }
     return rnd(GENERIC);
   }
-  function callFor(word, lon) {
-    const pre = lon < -90.1 ? 'K' : 'W', taken = new Set(E.STATIONS.map(s => s.call));
-    const letters = word.toUpperCase().replace(/[^A-Z]/g, '');
+  // ---------- other countries ----------
+  const LANGS = { mx: 'es-MX', es: 'es-ES', ar: 'es-AR', co: 'es-CO', cl: 'es-CL', pe: 'es-PE', ve: 'es-VE', ec: 'es-EC', gt: 'es-GT', cr: 'es-CR', pa: 'es-PA', do: 'es-DO', uy: 'es-UY', bo: 'es-BO', py: 'es-PY', hn: 'es-HN', sv: 'es-SV', ni: 'es-NI', cu: 'es-CU', pr: 'es-PR',
+    br: 'pt-BR', pt: 'pt-PT', fr: 'fr-FR', be: 'fr-BE', ch: 'de-CH', de: 'de-DE', at: 'de-AT', it: 'it-IT', gb: 'en-GB', ie: 'en-IE', au: 'en-AU', nz: 'en-NZ', ca: 'en-CA', za: 'en-ZA', in: 'en-IN', ph: 'en-PH', sg: 'en-SG', ng: 'en-NG' };
+  const langFor = (cc) => LANGS[cc] || 'en';
+  const LATIN_CC = new Set(['mx', 'es', 'ar', 'co', 'cl', 'pe', 've', 'ec', 'gt', 'cr', 'pa', 'do', 'uy', 'bo', 'py', 'hn', 'sv', 'ni', 'cu', 'pr', 'br', 'pt']);
+  const ASIA_POP = new Set(['kr', 'jp', 'th', 'tw', 'hk', 'vn', 'id', 'my', 'sg', 'ph']);
+  // call letters where countries use them on air; a short brand code everywhere else
+  const CALL_PREFIX = { ca: () => 'C' + rnd(['F', 'H', 'I', 'J', 'K']), mx: () => 'XH', jp: () => 'JO', kr: () => 'HL', ph: () => 'DW', br: () => 'ZY', ar: () => 'LR', co: () => 'HJ', cl: () => 'CB', pe: () => 'OA', pr: () => 'W' };
+  function callFor(word, lon, cc = 'us', d = null) {
+    if (cc !== 'us' && !CALL_PREFIX[cc]) {
+      if (d) d.brand = true;
+      const L = word.toUpperCase().normalize('NFD').replace(/[^A-Z]/g, '');
+      return (L[0] + L.slice(1).replace(/[AEIOU]/g, '')).slice(0, 4).padEnd(3, 'X');
+    }
+    if (d) d.brand = false;
+    const pre = cc === 'us' ? (lon < -90.1 ? 'K' : 'W') : CALL_PREFIX[cc](), taken = new Set(E.STATIONS.map(s => s.call));
+    const letters = word.toUpperCase().normalize('NFD').replace(/[^A-Z]/g, '');
     const cons = letters[0] + letters.slice(1).replace(/[AEIOU]/g, '');
     const tries = [cons.slice(0, 3), letters.slice(0, 3), (cons[0] + cons.slice(-2)), cons.slice(0, 2) + letters.slice(-1)];
-    for (const t of tries) if (t.length === 3 && !taken.has(pre + t)) return pre + t;
+    const n = pre.length >= 2 ? 2 : 3;
+    for (const t of tries) if (t.length >= n && !taken.has(pre + t.slice(0, n))) return pre + t.slice(0, n);
     const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     for (let i = 0; i < 60; i++) { const c = pre + letters[0] + L[Math.floor(Math.random() * 26)] + L[Math.floor(Math.random() * 26)]; if (!taken.has(c)) return c; }
     return pre + 'NEW';
@@ -219,7 +240,7 @@
     }
     if (only === 'all' || only === 'name') {
       const word = chooseName(d, d.format || 'Top 40');
-      d.call = callFor(word, d.lon);
+      d.call = callFor(word, d.lon, d.country || 'us', d);
       d.name = `${word} ${d.freq}`;
     }
     if (only === 'all' || only === 'home') d.home = chooseHome(d);
@@ -229,5 +250,5 @@
     return d;
   }
 
-  window.RadioAuto = { generate, FORMATS, readDescription };
+  window.RadioAuto = { generate, FORMATS, readDescription, langFor };
 }

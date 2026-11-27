@@ -57,7 +57,11 @@
   }
   D.CURRENTS.forEach(r => addSong(mkSong(r, 'current', 'seed')));
   (L.currents || []).forEach(r => addSong(mkSong(r, 'current', 'lib')));
-  (A.songs || []).forEach(r => addSong(mkSong(r, 'current', 'auto')));
+  // the weekly Spotify chart, minus anything from before 2010 ("nothing too old") and remasters of old songs
+  const MIN_YEAR = D.GOLD_MIN_YEAR || 2010, REL = A.releases || {};
+  const HOLIDAY = /christmas|xmas|santa|jingle|sleigh|mistletoe|let it snow|navidad|holiday|reindeer|winter wonderland|silent night|underneath the tree|rockin' around|most wonderful time|deck the halls|o holy night|joy to the world|carol of the bells/i;
+  (A.songs || []).filter(r => !/remaster/i.test(r[1]) && !HOLIDAY.test(r[1]) && !(REL[r[0]] && +REL[r[0]].slice(0, 4) < MIN_YEAR))
+    .forEach(r => addSong(mkSong(r, 'current', 'auto')));
   // Daniel's US New Music Chart: its score is the main signal for any song it ranks
   const C = root.RADIO_COMPOSITE || { rows: [] };
   // brand-new chart songs the daily job found, so they're playable and get spins right away
@@ -94,6 +98,31 @@
       src: 'hist', only: null, asOf: peakDate, x: EXPLICIT.has(id), hist: { debut: e - 4, peak: p, decay: Math.max(3, (exit - p) / 0.8 + 2) } };
     SONGS.set(id, song); byKey.set(key, song);
   });
+
+  // ----- the world: each country's Spotify chart (filled in daily by the chart job → composite.js) -----
+  // A song's strength can differ by country; stations outside the US play what's big where they are.
+  const W = C.world || { charts: {} };
+  const ENGLISH = new Set(['gb', 'ie', 'ca', 'au', 'nz', 'za', 'ng', 'ph', 'sg', 'in', 'ae']);
+  Object.entries(W.charts || {}).forEach(([cc, rows]) => rows.forEach(([id, title, artist, tags, score, days]) => {
+    const key = songKey(title, artist);
+    let song = SONGS.get(id) || byKey.get(key);
+    if (!song) {
+      song = mkSong([id, title, artist, tags, score, Math.max(1, Math.ceil((days || 7) / 7)), 'hold', W.weekEnding || C.weekEnding], 'current', 'world');
+      song.wscore = score;
+      SONGS.set(song.id, song); byKey.set(key, song);
+    }
+    (song.markets || (song.markets = new Map())).set(cc, score);
+  }));
+  // how big a song is at this station's home, compared with how big the song is overall
+  function marketFactor(st, song) {
+    const cc = st.country || 'us';
+    if (cc === 'us') return song.src === 'world' ? 0 : 1;               // songs only big abroad stay abroad
+    if (song.kind !== 'current') return 1;
+    const local = song.markets?.get(cc);
+    const base = song.src === 'world' ? song.wscore : Math.min(100, song.score ?? 60);
+    if (local != null) return (0.4 + 0.6 * local / 100) / (0.4 + 0.6 * base / 100);
+    return song.src === 'world' ? 0.05 : ENGLISH.has(cc) ? 0.5 : 0.25;
+  }
 
   const GOLD = new Map();
   Object.entries(D.GOLD).forEach(([key, [id, title, artist, year]]) => GOLD.set(key, { key, id, title, artist, year, kind: 'gold', x: EXPLICIT.has(id) }));
@@ -173,7 +202,7 @@
     if (song.only) return song.only.has(st.id) ? 1 : 0;
     if (st.clean && song.x) return 0;
     const w = song.tags.map(t => st.tags[t] ?? (t === 'rap' ? 0.15 : 1));
-    return Math.pow(w.reduce((a, b) => a + b, 0) / w.length, 1.6); // exaggerate taste so stations sound different
+    return Math.pow(w.reduce((a, b) => a + b, 0) / w.length, 1.6) * marketFactor(st, song); // exaggerate taste so stations sound different
   }
   function newBias(st, age) {
     if (age <= 4) return 1 + st.nb;
@@ -351,10 +380,15 @@
   }
 
   // Network chart: total spins across every station
-  function networkChart(k) {
+  // scope 'us': the US stations (the Network Top 40) · 'world': the stations abroad (the World Top 40)
+  const inScope = (st, scope) => scope === 'world' ? !!st.country && st.country !== 'us' : !st.country || st.country === 'us';
+  const netMemo = new Map();
+  function networkChart(k, scope = 'us') {
+    const mk = scope + ':' + k; if (netMemo.has(mk)) return netMemo.get(mk);
     const tally = (x) => {
       const m = new Map();
       for (const st of STATIONS) {
+        if (!inScope(st, scope)) continue;
         const { chart } = rawChart(st, x);
         const ranked = spinsAt(st, x);
         const posOf = new Map(chart.map(c => [c.song.id, c.pos]));
@@ -385,6 +419,8 @@
       last = new Map(all.map(e => [e.song.id, e]));
       c.forEach(e => { weeks.set(e.song.id, (weeks.get(e.song.id) || 0) + 1); peaks.set(e.song.id, Math.min(peaks.get(e.song.id) ?? 99, e.pos)); });
     }
+    if (netMemo.size > 20) netMemo.clear();
+    netMemo.set(mk, res);
     return res;
   }
 
@@ -439,7 +475,7 @@
   // ----- stations built in the app -----
   function clearStation(id) {
     for (const m of [memo, spinMemo, mdMemo]) for (const k of [...m.keys()]) if (k.startsWith(id + ':')) m.delete(k);
-    goldCache.delete(id); candCache.delete(id);
+    goldCache.delete(id); candCache.delete(id); netMemo.clear();
     for (const k of [...pickMemo.keys()]) if (k.startsWith(id + ':')) pickMemo.delete(k);
   }
   function addStation(st) {
@@ -469,7 +505,7 @@
   root.RadioEngine = {
     addStation, removeStation, previewChart, durationOf, songKey,
     STATIONS, byId, SONGS, GOLD, goldFor, custom, AUTO: A, LIBRARY: L, COMPOSITE: C, compositeChart, CHART_SIZE, NETWORK_SIZE,
-    weekIndexFor, weekEnding, countdown, isEstablished, FIRST_WEEK, networkChart, plantReport, rotation, stationSpins, hash,
+    weekIndexFor, weekEnding, countdown, isEstablished, FIRST_WEEK, inScope, networkReady: (k, scope = 'us') => netMemo.has(scope + ':' + k), networkChart, plantReport, rotation, stationSpins, hash,
     nowWeek: () => Math.max(0, weekIndexFor(Date.now())),
   };
 })(typeof window !== 'undefined' ? window : globalThis);

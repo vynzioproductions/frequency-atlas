@@ -16,7 +16,7 @@
 // Run: node scripts/update-composite.mjs        (Node 20+)
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, songKey, isHoliday, tagsFor, loadBrowserData } from './shared.mjs';
+import { ROOT, songKey, isHoliday, tagsFor, isKnownArtist, loadBrowserData } from './shared.mjs';
 import { parseKworb } from './update-chart.mjs';
 
 const UA = { 'user-agent': 'Mozilla/5.0 (frequency-atlas chart bot; github actions)' };
@@ -154,6 +154,7 @@ async function main() {
   const ranked = [];
   for (const s of contenders) {
     const ageDays = s.release ? (now - Date.parse(s.release)) / DAY : (s.days ?? 0);
+    if ((s.release && +s.release.slice(0, 4) < 2010) || /remaster/i.test(s.title)) continue;   // nothing from before 2010, ever
     if (ageDays > OLD_DAYS) {
       // a genuine resurgence: back on the Spotify chart only recently, or climbing on Shazam
       const resurgent = (s.days != null && s.days <= 45) || (s.srcs.shazam && s.srcs.shazam <= 40);
@@ -204,7 +205,31 @@ async function main() {
     }
   } catch (e) { console.log(`history IDs: skipped (${e.message})`); }
 
-  const out = { title: 'US New Music Chart', weekEnding, updated: today, status: `Updated ${today} · ${used}`, rows, songs: extra, historyIds };
+  // ---- the world: each country's Spotify daily chart, top 60, for the stations abroad ----
+  let world = { charts: {} };
+  try { world = loadBrowserData('composite.js').RADIO_COMPOSITE.world || world; } catch { /* first run */ }
+  const COUNTRIES = 'ca mx gb ie fr de nl es it se no dk pl pt tr br ar co cl pe kr jp ph id in au nz za ng ae sg th eg'.split(' ');
+  const LATIN = new Set(['mx', 'es', 'ar', 'co', 'cl', 'pe', 'br', 'pt']);
+  let got = 0;
+  for (const cc of COUNTRIES) {
+    try {
+      const { rows: list } = parseKworb(await get(`https://kworb.net/spotify/country/${cc}_daily.html`));
+      if (list.length < 40) throw new Error(`only ${list.length} rows`);
+      const n = Math.min(200, list.length);
+      world.charts[cc] = list.filter(r => r.id && !isHoliday(r.title)).slice(0, 60).map(r => {
+        const artists = ent(r.artist).split(/,|&/).map(a => a.trim());
+        let tags = tagsFor(artists);
+        if (!isKnownArtist(artists)) tags = cc === 'kr' ? ['kpop'] : LATIN.has(cc) ? ['latin'] : ['pop'];
+        return [r.id, ent(r.title).replace(/\s*[([](from|w\/|with|feat\.?|ft\.?)\s[^)\]]*[)\]]/gi, '').trim(), ent(r.artist), tags.join(' '), Math.round(40 + 56 * (n + 1 - r.pos) / n), r.wks || 1];
+      });
+      got++;
+      await new Promise(r => setTimeout(r, 300));
+    } catch (e) { console.log(`world ${cc}: skipped (${e.message}); keeping the last copy`); }
+  }
+  world.weekEnding = weekEnding; world.updated = today;
+  console.log(`world: ${got} of ${COUNTRIES.length} country charts updated`);
+
+  const out = { title: 'US New Music Chart', weekEnding, updated: today, status: `Updated ${today} · ${used}`, rows, songs: extra, historyIds, world };
   fs.writeFileSync(path.join(ROOT, 'composite.js'),
     `/* Daniel's US New Music Chart — rebuilt daily by scripts/update-composite.mjs.\n   rows: [pos, title, artist, lastPos, peak, weeks, score]; songs: new chart songs the app didn't know yet. */\nwindow.RADIO_COMPOSITE = ${JSON.stringify(out)};\n`);
   console.log(`composite.js: ${rows.length} songs (${extra.length} new to the app), #1 ${rows[0][1]} — ${rows[0][2]}. Sources: ${used}.`);

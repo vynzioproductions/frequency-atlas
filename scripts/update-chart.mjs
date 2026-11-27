@@ -3,7 +3,7 @@
 // Run: node scripts/update-chart.mjs            (fetches the live chart)
 //      node scripts/update-chart.mjs file.html  (parses a saved copy, for testing)
 import fs from 'node:fs';
-import { tagsFor, isKnownArtist, isHoliday, writeJsGlobal, loadBrowserData } from './shared.mjs';
+import { tagsFor, isKnownArtist, isHoliday, writeJsGlobal, loadBrowserData, releaseOf } from './shared.mjs';
 
 const URL = 'https://kworb.net/spotify/country/us_weekly.html';
 const MAX_WEEKS = 78;   // skip songs that have been on the chart 18+ months ("nothing too old")
@@ -46,7 +46,24 @@ async function main() {
     console.error(`Only parsed ${rows.length} rows (date ${date}); the page layout may have changed. Keeping the previous auto.js.`);
     process.exit(local ? 1 : 0);
   }
-  const eligible = rows.filter(r => r.wks <= MAX_WEEKS && !isHoliday(r.title));
+  // release dates (cached in auto.js) for the "nothing too old" rules
+  let releases = {};
+  try { releases = loadBrowserData('auto.js').RADIO_AUTO.releases || {}; } catch { /* first run */ }
+  if (!local) for (const r of rows) {
+    if (releases[r.id] !== undefined) continue;
+    releases[r.id] = await releaseOf(r.id);
+    await new Promise(res => setTimeout(res, 150));
+  }
+  const now = Date.now(), { RADIO_DATA: D0 } = loadBrowserData();
+  const minYear = D0.GOLD_MIN_YEAR || 2010;
+  const tooOld = (r) => {
+    const rel = releases[r.id]; if (!rel) return false;
+    if (+rel.slice(0, 4) < minYear) return true;                        // never anything from before 2010
+    const ageDays = (now - Date.parse(rel)) / 864e5;
+    // over 18 months old: only a genuine resurgence (back on the chart recently and climbing) stays
+    return ageDays > 548 && !(r.wks <= 6 && r.plus > 0);
+  };
+  const eligible = rows.filter(r => r.wks <= MAX_WEEKS && !isHoliday(r.title) && !/remaster/i.test(r.title) && !tooOld(r));
   const top = Math.max(...eligible.map(r => r.streams));
   const { RADIO_DATA: D } = loadBrowserData();
   // align to the app's chart week (weeks end on Fridays)
@@ -62,8 +79,8 @@ async function main() {
     return [r.id, r.title, r.artist, tagsFor(r.artist.split(/,|&/)).join(' '), score, r.wks, trend, asOf, 0];
   });
   const unknown = [...new Set(eligible.filter(r => !isKnownArtist(r.artist)).map(r => r.artist))];
-  writeJsGlobal('auto.js', 'RADIO_AUTO', { source: 'Spotify US Weekly (kworb.net)', chartDate: date, asOf, updated: new Date().toISOString(), songs });
-  console.log(`auto.js: ${songs.length} songs from the Spotify US weekly chart dated ${date} (skipped ${rows.length - songs.length} holiday or 18-month-old songs)`);
+  writeJsGlobal('auto.js', 'RADIO_AUTO', { source: 'Spotify US Weekly (kworb.net)', chartDate: date, asOf, updated: new Date().toISOString(), songs, releases });
+  console.log(`auto.js: ${songs.length} songs from the Spotify US weekly chart dated ${date} (skipped ${rows.length - songs.length} holiday songs, pre-${minYear} songs and older songs that aren't resurging)`);
   if (unknown.length) console.log(`Artists without genre tags (treated as pop) — add them in scripts/shared.mjs if they're rap, country, etc.:\n  ${unknown.join('\n  ')}`);
 }
 
