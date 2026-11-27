@@ -105,6 +105,7 @@
     pause() { try { this.music?.pause(); } catch { /* not playing */ } },
     resume() { try { this.music?.play(); } catch { /* nothing queued */ } },
     duck(on) { try { this.music.volume = on ? 0.2 : 1; } catch { /* not ready */ } },
+    isPlaying() { try { return !!this.music?.isPlaying; } catch { return false; } },
     align(sec) { try { const t = this.music.currentPlaybackTime; if (sec - t > 3) this.music.seekToTime(sec); } catch { /* not ready */ } },
     isPaused() { return !this.music || this.music.playbackState !== MusicKit.PlaybackStates.playing; },
   };
@@ -192,6 +193,7 @@
       if (this.connect) return this.pollRemote();
       if (!this.current || !this.player || source !== 'spotify') return;
       const s = await this.player.getCurrentState().catch(() => null); if (!s) return;
+      this.playingNow = !s.paused;
       if (!s.paused) { this.wasPlaying = true; this.lastPos = s.position; this.dur = s.duration; }
       const nearEnd = !s.paused && s.duration > 35000 && s.position >= s.duration - 1200;
       const reset = s.paused && this.wasPlaying && s.position === 0 && this.lastPos >= this.dur - 3000;
@@ -282,6 +284,7 @@
     },
     resume() { if (this.connect) this.api('PUT', '/me/player/play'); else this.player?.resume().catch(() => {}); },
     duck(on) { if (!this.connect) this.player?.setVolume(on ? 0.18 : 0.85).catch(() => {}); },
+    isPlaying() { return this.connect ? !!this.remote?.playing : !!this.playingNow; },
     align(sec) {
       if (this.connect) return;
       this.player?.getCurrentState().then(s => { if (s && sec * 1000 - s.position > 3000) this.player.seek(Math.round(sec * 1000)); }).catch(() => {});
@@ -379,6 +382,7 @@
     pause() { try { this.player?.pauseVideo(); } catch { /* not ready */ } },
     resume() { try { this.player?.playVideo(); } catch { /* not ready */ } },
     duck(on) { try { this.player?.setVolume(on ? 18 : 100); } catch { /* not ready */ } },
+    isPlaying() { try { const st = this.player?.getPlayerState?.(); return st === 1 || st === 3; } catch { return false; } },
     // only ever jump forward: a song started early under an ID just keeps going
     align(sec) { try { const t = this.player.getCurrentTime(); if (sec - t > 3) this.player.seekTo(sec, true); } catch { /* not ready */ } },
   };
@@ -414,7 +418,7 @@
   pauseBtn.addEventListener('click', () => {
     const p = active(); if (!p) return;
     api.held = !api.held;
-    if (api.held) p.pause(true); else if (A.isLive()) A.replay(); else p.resume();   // live radio rejoins where everyone is
+    if (api.held) p.pause(true); else p.resume();   // pick the song up right where you paused it
     pauseBtn.setAttribute('aria-pressed', String(!api.held));
   });
 

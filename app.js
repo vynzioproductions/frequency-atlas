@@ -491,46 +491,66 @@
   function refreshListen() { if (state.view === state.station?.id && state.tab === 'listen') renderStation(state.station); }
 
   // ---- live ----
+  // Tuning in joins the broadcast where everyone else is. From then on the player is the clock:
+  // every song plays to its real end, then the station's log carries on with whatever comes next.
+  // (Cutting songs off at their scheduled slot was what chopped songs and jumped back and forth:
+  // a YouTube video or a Spotify version is rarely exactly as long as the slot in the schedule.)
   function goLive() {
     const st = state.station; if (!st) return;
     state.mode = 'live'; state.cd = []; state.inCountdown = false; state.walking = false; state.walkAt = 0; stopTimer(); hush();
     updatePlayerHead();
     const { item, offset, next } = LIVE().at(st);
-    if (item) playItem(item, offset, next); else idle();
-    scheduleNext(next);
+    if (item) onAir(item, offset); else if (next) onAir(next, 0); else idle();
     refreshListen();
   }
-  // the next scheduled item starts when the background-safe clock (clock.js) or a Spotify
-  // progress update says it's time, so a hidden tab keeps the broadcast moving
+  const slotLen = (it) => it.end - it.start;
+  function nextAfter(it) {
+    const r = LIVE().at(state.station, it.end + 1);
+    return r.item && r.item !== it && r.item.start >= it.end - 1 ? r.item : r.next;
+  }
+  async function onAir(item, offset = 0) {
+    const st = state.station; if (!st || !item) return;
+    state.cursor = item; state.onAirAt = Date.now() - offset; state.sawPlaying = false;
+    state.nextAt = null; scheduleNext(null);
+    if (item.type === 'song') return playSong(item.song, item.cat, offset);
+    // a station ID: the next song starts quietly under it, like a DJ talking over an intro
+    let nx = nextAfter(item);
+    while (nx && nx.type !== 'song') nx = nextAfter(nx);
+    if (!nx) return;
+    if (slotLen(item) - offset > 2500) {
+      startUnder(nx.song, nx.cat);
+      await imaging(item.text, offset > 1500 ? 'short' : item.kind);
+      if (state.cursor !== item) return;        // listener changed station meanwhile
+    }
+    state.cursor = nx; state.onAirAt = Date.now(); state.sawPlaying = false;
+    playSong(nx.song, nx.cat, 0);               // already rolling under the ID: this just brings it up
+  }
+  // the song on the air finished: go to the next thing in the log
+  function advance() {
+    const st = state.station; if (!st || !state.cursor) return goLive();
+    let nx = nextAfter(state.cursor);
+    // fell far behind everyone else (long pause, sleeping phone): catch up at the next song boundary
+    const live = LIVE().at(st);
+    if (!nx || Date.now() - nx.start > 4 * 60000) nx = live.item?.type === 'song' ? live.item : (live.item || live.next);
+    onAir(nx, 0);
+  }
   function scheduleNext(next) { state.nextAt = next ? next.start : null; }
+  // Safety net only: if a player stalls and never reports the end of a song, move on.
+  // It never cuts a song that is still playing.
   function liveCheck(now = Date.now()) {
-    if (state.walking || state.mode !== 'live' || !state.station || !state.nextAt || now < state.nextAt - 250) return;
-    const { item, offset, next } = LIVE().at(state.station, Math.max(now, state.nextAt));
-    scheduleNext(next);
-    if (window.RadioAccounts?.held) return;     // listener paused the full-song player: the schedule moves on silently
-    if (item) playItem(item, offset, next); else idle();
-    if (!document.hidden) refreshListen();
+    if (state.walking || state.mode !== 'live' || !state.station || !state.cursor || state.cursor.type !== 'song') return;
+    if (window.RadioAccounts?.held) return;      // listener pressed pause: wait for them
+    const ext = window.RadioAccounts?.active();
+    const playing = state.viaEmbed ? state.embedPlaying : !!ext?.isPlaying?.();
+    if (playing) { state.sawPlaying = true; return; }
+    if (!state.sawPlaying) return;               // hasn't started yet (a phone may need a tap): don't skip it
+    if (now > state.onAirAt + slotLen(state.cursor) + 20000) advance();
   }
   window.RadioClock.onTick(liveCheck);
-  // coming back to the tab: if anything was missed, jump to what's on now
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden || state.mode !== 'live' || !state.station || state.walking) return;
-    const { item } = LIVE().at(state.station);
-    if (item && item.type === 'song' && item.song.id !== state.playing?.id) goLive(); else refreshListen();
-  });
+  // coming back to the tab: just redraw. Nothing jumps; the song you're hearing keeps going.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshListen(); });
   function idle() { $('#plCat').textContent = ''; $('#plTitle').textContent = 'Stay tuned…'; }
-  async function playItem(item, offset, next) {
-    hush();
-    if (item.type === 'song') return playSong(item.song, item.cat, offset);
-    // a station ID; skip it if we tuned in at its very end
-    if (item.end - Date.now() < 2500) return;
-    // The player never stops: the next song starts quietly under the ID, like a DJ talking over an intro.
-    // Browsers won't start new media in a background tab, but they keep media that's already playing going.
-    if (next?.type === 'song') startUnder(next.song, next.cat);
-    else { state.controller?.pause?.(); window.RadioAccounts?.active()?.pause(); }
-    await imaging(item.text, offset > 1500 ? 'short' : item.kind);
-    if (state.under) unduck();
-  }
+  function playItem(item, offset) { return onAir(item, offset); }
   function startUnder(song, cat) {
     state.under = song;
     playSong(song, cat, 0, true);
@@ -628,19 +648,11 @@
     const st = state.station; if (!st) return;
     if (state.mode === 'live') {
       // only a 30-second preview was available: keep the music going with the station's next songs
-      // instead of sitting silent until the full song's slot ends
       if (state.viaEmbed && state.previewOnly) {
         if (++state.walkN % 3 === 0) await imaging(DJ.positioner(st), 'short');
         return previewNext();
       }
-      // the song ran short of its slot: roll straight into what's next (under a quick ID) instead of going silent
-      const { item, next } = LIVE().at(st);
-      if (item && item.type === 'song' && item.end - Date.now() > 4000) {
-        let nx = next;
-        if (nx && nx.type !== 'song') nx = LIVE().upcoming(st, 2, nx.end).find(i => i.type === 'song');
-        if (nx) { startUnder(nx.song, nx.cat); await imaging(DJ.positioner(st), 'short'); if (state.under) unduck(); }
-      }
-      return;
+      return advance();
     }
     if (state.cd.length) {
       const nx = state.cd[0];
@@ -667,6 +679,7 @@
         const { isPaused, position, duration } = e.data || {};
         liveCheck();
         if (!state.viaEmbed) return;   // a full-song player is in charge
+        state.embedPlaying = !isPaused;
         // right after switching songs the embed can still report the old song's end: ignore it
         if (state.embedFresh) { lastPos = 0; wasPlaying = false; if (Date.now() - state.loadedAt < 2500 || position > 4000) return; state.embedFresh = false; }
         if (!duration) return;
@@ -703,7 +716,7 @@
     showNow: (song) => { $('#plTitle').textContent = `${song.title} — ${song.artist}`; }, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
     // the next songs after the current one, so a phone's Spotify app can keep playing in the background
     upNext: (n) => state.mode === 'live' && state.station ? LIVE().upcoming(state.station, n + 1).map(i => i.song.id) : state.cd.map(c => c.song.id).slice(0, n),
-    replay: () => { if (!state.station) return; if (state.mode === 'live') goLive(); else if (state.playing) playSong(state.playing, state.playingCat); },
+    replay: () => { if (!state.station) return; if (state.mode === 'live' && state.cursor?.type === 'song') playSong(state.cursor.song, state.cursor.cat, Date.now() - state.onAirAt); else if (state.mode === 'live') goLive(); else if (state.playing) playSong(state.playing, state.playingCat); },
     stopIf: (id) => { if (state.station?.id === id) { state.station = null; $('#player').hidden = true; } } };
   route();
   if (!location.hash) setTimeout(() => toast('Tap a glowing dot to tune in'), 600);
