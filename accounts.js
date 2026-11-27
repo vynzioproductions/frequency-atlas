@@ -213,12 +213,30 @@
     },
     // phones: tell the Spotify app to play this song plus what's scheduled after it,
     // so the radio keeps going even when the browser is in the background
+    async remoteNow() {
+      const r = await this.api('GET', '/me/player');
+      if (!r || r.status === 204 || !r.ok) return null;
+      const s = await r.json().catch(() => null); if (!s) return null;
+      this.remote = { id: s.item?.id, pos: s.progress_ms, playing: s.is_playing, at: Date.now() };
+      return this.remote;
+    },
     async playRemote(song, seekSec) {
       const pos = Math.max(0, Math.round((seekSec || 0) * 1000));
-      const rm = this.remote;
-      if (rm && rm.id === song.id && rm.playing && Math.abs(rm.pos + (Date.now() - rm.at) - pos) < 6000) { this.current = song; return true; }  // already there
+      // The Spotify app plays our queued songs back to back on its own (with no gaps for station IDs),
+      // so it runs a little ahead of the schedule. If it's already on this song, or one song either side
+      // of it in our queue, leave it alone: restarting it is what made songs jump and repeat.
+      const rm = await this.remoteNow();
+      const q = this.queue || [], qs = this.queueStation === A.stationId();
+      if (rm && rm.playing && rm.id) {
+        const a = q.indexOf(rm.id), b = q.indexOf(song.id);
+        const same = rm.id === song.id && Math.abs(rm.pos - pos) < 30000;
+        const near = qs && a >= 0 && b >= 0 && Math.abs(a - b) <= 1;
+        if (same || near) { if (this.current !== song) { this.current = song; this.endedFor = null; } return true; }
+      }
       this.current = song; this.endedFor = null; this.wasPlaying = false; this.lastPos = 0;
-      const uris = [song.id, ...A.upNext(14).filter(id => id !== song.id)].map(id => 'spotify:track:' + id);
+      const ids = [song.id, ...A.upNext(14).filter(id => id !== song.id)];
+      this.queue = ids; this.queueStation = A.stationId();
+      const uris = ids.map(id => 'spotify:track:' + id);
       const dev = await this.phoneDevice();
       let r = await this.api('PUT', '/me/player/play' + (dev ? '?device_id=' + encodeURIComponent(dev.id) : ''), { uris, position_ms: pos });
       if (r && (r.ok || r.status === 202 || r.status === 204)) { this.remote = { id: song.id, pos, playing: true, at: Date.now() }; return true; }
@@ -232,6 +250,8 @@
       if (this.connect) return this.playRemote(song, seekSec);
       const p = await this.init().catch(() => null); if (!p) return false;
       const t = await this.token(); if (!t) return false;
+      const st0 = await p.getCurrentState().catch(() => null);
+      if (st0 && !st0.paused && st0.track_window?.current_track?.id === song.id && Math.abs(st0.position - (seekSec || 0) * 1000) < 8000) { this.current = song; return true; }
       this.current = song; this.endedFor = null; this.wasPlaying = false; this.lastPos = 0;
       try { p.activateElement?.(); } catch { /* not needed on this browser */ }
       const r = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${encodeURIComponent(this.device)}`, {

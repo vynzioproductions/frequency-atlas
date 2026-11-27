@@ -23,11 +23,17 @@ const E = ctx.RadioEngine;
 let prev = { ids: {}, misses: {} };
 if (fs.existsSync(OUT)) { const c = { window: {} }; vm.runInNewContext(fs.readFileSync(OUT, 'utf8'), c); prev = Object.assign(prev, c.window.RADIO_YT || {}); }
 
-// priority: songs on the air now (currents, plants), then throwbacks used by the most stations
+// priority: by how much airtime each song gets across all stations this week, so the songs heard most
+// get full versions first (a power song plays ~3 times an hour on dozens of stations; a throwback rarely)
 const want = new Map();
-const add = (s, w) => { if (!s?.id || !s.title) return; const cur = want.get(s.id); if (cur) cur.w += w; else want.set(s.id, { song: s, w }); };
-for (const s of E.SONGS.values()) add(s, s.kind === 'gold' ? 1 : 100);
-for (const st of E.STATIONS) for (const g of E.goldFor(st)) add(g, 1);
+const add = (s, w) => { if (!s?.id || !s.title || String(s.id).startsWith('h_')) return; const cur = want.get(s.id); if (cur) cur.w += w; else want.set(s.id, { song: s, w }); };
+const PER_HOUR = { power: 3, currents: 3, medium: 1, adds: 3, deep: 2, recurrents: 1, plants: 1, gold: 2 };
+const week = E.nowWeek();
+for (const st of E.STATIONS) {
+  const rot = E.rotation(st, week, { broadcast: true });
+  for (const [cat, list] of Object.entries(rot)) list.forEach(sg => add(sg, (PER_HOUR[cat] || 1) / Math.max(1, list.length)));
+}
+for (const s of E.SONGS.values()) add(s, 0.0001);        // everything else, eventually
 const today = new Date().toISOString().slice(0, 10);
 const todo = [...want.values()]
   .filter(({ song }) => !prev.ids[song.id] && !(prev.misses[song.id] && (Date.parse(today) - Date.parse(prev.misses[song.id])) / 864e5 < RETRY_DAYS))

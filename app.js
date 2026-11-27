@@ -109,8 +109,9 @@
       renderStation(st);
     } else if (h === 'build' || h.startsWith('build-')) {
       state.view = h; window.RadioBuilder?.open(h === 'build' ? null : E.byId[h.slice(6)]);
-    } else if (h === 'network') {
+    } else if (h === 'network' || h === 'adds') {
       if (state.view !== 'network') state.week = NOW;
+      if (h === 'adds') state.netView = 'adds';
       state.view = 'network'; renderNetwork();
     } else if (h === 'sync' || h.startsWith('import-') || h === 'account') {
       state.view = h; // handled by sync.js / accounts.js
@@ -291,8 +292,96 @@
   }
 
   // ---------------- network panel ----------------
+  // ---------------- weekly adds: what every station added, planted and dropped this chart week ----------------
+  const addsMemo = new Map();
+  function renderAdds() {
+    const p = $('#panel'); p.hidden = false; p.style.setProperty('--c', '#ffd23d');
+    const scope = state.addsScope || 'us';
+    const scoped = E.STATIONS.filter(st => E.inScope(st, scope));
+    $('#panelBody').innerHTML = `<div class="net"><div class="hero" style="--c:#ffd23d"><div class="hero-top"><div class="logo">+<small>ADDS</small></div>
+      <div><h2>Adds</h2><div class="sub"><b>${scoped.length} ${scope === 'world' ? 'stations around the world' : 'US stations'}</b> · new songs, plants and drops</div></div></div>
+      <div class="tabs" role="tablist" style="margin-top:14px">
+        <button role="tab" data-net="network">Network 40</button>
+        <button role="tab" data-net="world">World 40</button>
+        <button role="tab" data-net="composite">New Music</button>
+        <button role="tab" data-net="adds" aria-selected="true">Adds</button>
+      </div></div></div>
+      <div class="tabpane" id="tabpane"></div>`;
+    $('.net .tabs').addEventListener('click', e => { const b = e.target.closest('[data-net]'); if (b) { state.netView = b.dataset.net; renderNetwork(); } });
+    const pane = $('#tabpane');
+    const mode = state.addsMode || 'day';
+    const toggles = `<div class="chips" style="margin:4px 2px 10px"><button class="chip ${mode === 'day' ? 'on' : ''}" data-mode="day">Day by day</button><button class="chip ${mode === 'week' ? 'on' : ''}" data-mode="week">Whole week</button>
+      <span style="flex:1"></span><button class="chip ${scope === 'us' ? 'on' : ''}" data-scope="us">US</button><button class="chip ${scope === 'world' ? 'on' : ''}" data-scope="world">World</button></div>`;
+    const bindTop = () => {
+      pane.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => { state.addsScope = b.dataset.scope; renderAdds(); }));
+      pane.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { state.addsMode = b.dataset.mode; renderAdds(); }));
+    };
+    const li = (sg, extra = '') => `<li><b>${esc(sg.title)}</b> <span>${esc(sg.artist)}</span>${extra}</li>`;
+    if (mode === 'day') {
+      // ---- one day: what each music director added or planted ----
+      const today = E.today(), day = state.addsDay && state.addsDay <= today ? state.addsDay : today;
+      const shift = (n) => new Date(Date.parse(day + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+      const all = scoped.map(st => ({ st, ...E.dailyAdds(st, day) })).filter(a => a.adds.length || a.plants.length);
+      const tally = new Map();
+      all.forEach(a => [...a.adds, ...a.plants.map(p => p.song)].forEach(sg => { const t = tally.get(sg.id) || { song: sg, n: 0 }; t.n++; tally.set(sg.id, t); }));
+      const most = [...tally.values()].sort((a, b) => b.n - a.n).slice(0, 10);
+      const label = new Date(day + 'T12:00:00Z').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      pane.innerHTML = toggles + `<div class="weekbar"><button class="navbtn" data-day="-1" aria-label="Previous day" ${day <= '2026-01-02' ? 'disabled' : ''}>‹</button>
+          <div class="wk">${esc(label)}<small>${day === today ? 'Today' : 'Chart week ending ' + esc(fmtDate(E.weekEnding(E.weekOfDay(day))))}</small></div>
+          <button class="navbtn" data-day="1" aria-label="Next day" ${day >= today ? 'disabled' : ''}>›</button></div>
+        <h3 class="bh">Most added ${day === today ? 'today' : 'that day'}</h3>
+        <ol class="chart">${most.map((t, i) => `<li class="row" style="--c:#ffd23d" data-play-add="${esc(t.song.id)}"><span class="pos">${i + 1}</span><span class="ti"><b>${esc(t.song.title)}</b><span>${esc(t.song.artist)}</span></span><span class="st"><b>${t.n}</b> station${t.n > 1 ? 's' : ''}</span></li>`).join('') || '<li class="lead" style="list-style:none">No adds that day.</li>'}</ol>
+        <h3 class="bh">Station by station <small style="color:var(--mute);font-weight:500">${all.length} of ${scoped.length} added something</small></h3>
+        ${all.map(a => `<details class="addst"><summary><span class="sw" style="background:${esc(a.st.color)}"></span><b>${esc(a.st.name)}</b> <small>${esc(a.st.city)}</small>
+            <span class="addcount">${a.adds.length ? '+' + a.adds.length + ' add' + (a.adds.length > 1 ? 's' : '') : ''}${a.plants.length ? (a.adds.length ? ' · ' : '') + a.plants.length + ' plant' + (a.plants.length > 1 ? 's' : '') : ''}</span></summary>
+          ${a.adds.length ? `<div class="addsec"><h4>Added to rotation</h4><ul>${a.adds.map(sg => li(sg)).join('')}</ul></div>` : ''}
+          ${a.plants.length ? `<div class="addsec"><h4>New plants</h4><ul>${a.plants.map(pl => li(pl.song, pl.push ? ' <em>big push</em>' : '')).join('')}</ul></div>` : ''}
+          <a class="btn btn-ghost" href="#station-${esc(a.st.id)}">Open ${esc(a.st.name)}</a></details>`).join('')}
+        <p class="legend">Every day, stations' music directors add new releases that fit their sound (about 3 a week each) and every other week pick new plants. Songs only move onto a station's Top 30 once a week, when the chart week ends on Friday; switch to "Whole week" to see those.</p>`;
+      bindTop();
+      pane.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => { state.addsDay = shift(+b.dataset.day); renderAdds(); }));
+      pane.querySelectorAll('[data-play-add]').forEach(el => el.addEventListener('click', () => { const song = E.SONGS.get(el.dataset.playAdd); if (song) request(state.station || E.STATIONS[0], song, 'pick'); }));
+      return;
+    }
+    const key = scope + ':' + state.week;
+    if (!addsMemo.has(key)) {
+      pane.innerHTML = '<p class="lead" style="padding:20px 4px">Going through every station\'s week…</p>';
+      setTimeout(() => { if (state.view === 'network' && state.netView === 'adds') { addsMemo.set(key, scoped.map(st => ({ st, ...E.weeklyAdds(st, state.week) }))); renderAdds(); } }, 30);
+      return;
+    }
+    const all = addsMemo.get(key);
+    // most added: songs that went onto the most Top 30s (or into rotation as a station's add) this week
+    const tally = new Map();
+    all.forEach(a => {
+      const seen = new Set();
+      [...a.debuts.map(d => d.song), ...a.adds].forEach(sg => { if (seen.has(sg.id)) return; seen.add(sg.id); const t = tally.get(sg.id) || { song: sg, n: 0 }; t.n++; tally.set(sg.id, t); });
+    });
+    const most = [...tally.values()].sort((a, b) => b.n - a.n).slice(0, 10);
+    const sec = (label, list) => list.length ? `<div class="addsec"><h4>${label}</h4><ul>${list.join('')}</ul></div>` : '';
+    const changed = all.filter(a => a.debuts.length || a.adds.length || a.plants.length || a.drops.length);
+    pane.innerHTML = toggles + weekBar(state.week) + `
+      <h3 class="bh">Most added</h3>
+      <ol class="chart">${most.map((t, i) => `<li class="row" style="--c:#ffd23d" data-play-add="${esc(t.song.id)}"><span class="pos">${i + 1}</span><span class="ti"><b>${esc(t.song.title)}</b><span>${esc(t.song.artist)}</span></span><span class="st"><b>${t.n}</b> station${t.n > 1 ? 's' : ''}</span></li>`).join('') || '<li class="lead">Nothing new this week.</li>'}</ol>
+      <h3 class="bh">Station by station</h3>
+      ${changed.map(a => `<details class="addst"><summary><span class="sw" style="background:${esc(a.st.color)}"></span><b>${esc(a.st.name)}</b> <small>${esc(a.st.city)}</small>
+          <span class="addcount">${a.debuts.length ? '+' + a.debuts.length + ' on the Top 30' : ''}${a.plants.length ? ' · ' + a.plants.length + ' plant' + (a.plants.length > 1 ? 's' : '') : ''}</span></summary>
+        ${sec('New on the Top 30', a.debuts.map(d => li(d.song, ` <em>#${d.pos}${d.re ? ', re-entry' : ''}</em>`)))}
+        ${sec("Music director's adds", a.adds.map(sg => li(sg)))}
+        ${sec('New plants', a.plants.map(pl => li(pl.song, pl.push ? ' <em>big push</em>' : '')))}
+        ${sec('Left the Top 30', a.drops.map(d => li(d.song, ` <em>was #${d.lastPos}</em>`)))}
+        <a class="btn btn-ghost" href="#station-${esc(a.st.id)}">Open ${esc(a.st.name)}</a>
+      </details>`).join('')}
+      <p class="legend">Chart weeks end on Fridays. Each station puts at most 3 new songs on its Top 30 a week; its music director also adds up to 3 brand-new releases to rotation every week and picks new plants every two weeks.</p>`;
+    bindTop();
+    pane.querySelectorAll('[data-wk]').forEach(b => b.addEventListener('click', () => { state.week += +b.dataset.wk; renderAdds(); }));
+    pane.querySelectorAll('[data-play-add]').forEach(el => el.addEventListener('click', () => {
+      const song = E.SONGS.get(el.dataset.playAdd); if (song) request(state.station || E.STATIONS[0], song, 'pick');
+    }));
+  }
+
   function renderNetwork() {
     const p = $('#panel'); p.hidden = false; p.style.setProperty('--c', '#2ee6c8');
+    if (state.netView === 'adds') return renderAdds();
     const comp = state.netView === 'composite', world = state.netView === 'world';
     const scope = world ? 'world' : 'us';
     const scoped = E.STATIONS.filter(st => E.inScope(st, scope));
@@ -300,9 +389,10 @@
     $('#panelBody').innerHTML = `<div class="net"><div class="hero"><div class="hero-top"><div class="logo">${comp ? '50' : '40'}<small>${comp ? 'US NEW' : world ? 'WORLD' : 'NETWORK'}</small></div>
       <div><h2>${comp ? esc(C.title || 'US New Music Chart') : world ? 'World Top 40' : 'Network Top 40'}</h2><div class="sub"><b>${comp ? 'Streaming + playlists' : `All ${scoped.length} ${world ? 'stations around the world' : 'US stations'}`}</b> · ${comp ? 'your composite chart' : 'total weekly spins'}</div></div></div>
       <div class="tabs" role="tablist" style="margin-top:14px">
-        <button role="tab" data-net="network" aria-selected="${!comp && !world}">Network Top 40</button>
-        <button role="tab" data-net="world" aria-selected="${world}">World Top 40</button>
-        <button role="tab" data-net="composite" aria-selected="${comp}">US New Music Chart</button>
+        <button role="tab" data-net="network" aria-selected="${!comp && !world}">Network 40</button>
+        <button role="tab" data-net="world" aria-selected="${world}">World 40</button>
+        <button role="tab" data-net="composite" aria-selected="${comp}">New Music</button>
+        <button role="tab" data-net="adds" aria-selected="false">Adds</button>
       </div></div></div>
       <div class="tabpane" id="tabpane"></div>`;
     $('.net .tabs').addEventListener('click', e => { const b = e.target.closest('[data-net]'); if (b) { state.netView = b.dataset.net; renderNetwork(); } });
@@ -602,7 +692,7 @@
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   window.RadioApp = { map, go, toast, esc, store, addMarker, removeMarker, renderDial, markers, nowWeek: NOW,
-    shareStation, onEnded, liveCheck, current: () => state.playing, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
+    shareStation, onEnded, liveCheck, current: () => state.playing, stationId: () => state.station?.id, isLive: () => state.mode === 'live', previewPlay: (song) => { if (state.playing === song) embedPlay(song); },
     // the next songs after the current one, so a phone's Spotify app can keep playing in the background
     upNext: (n) => state.mode === 'live' && state.station ? LIVE().upcoming(state.station, n + 1).map(i => i.song.id) : state.cd.map(c => c.song.id).slice(0, n),
     replay: () => { if (!state.station) return; if (state.mode === 'live') goLive(); else if (state.playing) playSong(state.playing, state.playingCat); },

@@ -303,3 +303,17 @@ details.fine > summary { cursor: pointer; color: var(--mute); font-weight: 600; 
 @media (max-width: 520px) { .autobar { flex-direction: column; align-items: stretch; } }
 .stn-label.hid { opacity: 0; pointer-events: none; }
 #dialList .dialhead { padding: 14px 12px 6px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); list-style: none; }
+
+/* weekly adds */
+.addst { border: 1px solid var(--line); border-radius: 12px; margin: 0 2px 8px; background: #ffffff05; }
+.addst > summary { cursor: pointer; padding: 10px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.addst > summary small { color: var(--mute); }
+.addst > summary .sw { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.addst .addcount { margin-left: auto; font-size: 12px; color: #ffd23d; }
+.addst .addsec { padding: 0 14px 6px; }
+.addst h4 { margin: 8px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); }
+.addst ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.addst li span { color: var(--mute); }
+.addst li em { color: #ffd23d; font-style: normal; font-size: 12px; }
+.addst .btn { margin: 6px 14px 12px; }
+.chip.on { background: var(--c, #ffd23d); color: #0b0f1a; border-color: transparent; }

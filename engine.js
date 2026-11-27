@@ -20,6 +20,12 @@
   const FIRST_WEEK = weekIndexFor(Date.parse('2026-01-02T12:00:00Z'));
   const EARLIEST = () => FIRST_WEEK - 5;
   function weekEnding(k) { return new Date(ANCHOR + k * 7 * DAY); }
+  // days: 'YYYY-MM-DD'. The chart week dated Friday k is on the air from the Friday before through Thursday
+  // (it takes over Friday morning), so its days are Friday through Thursday.
+  const dayStr = (ms) => new Date(ms).toISOString().slice(0, 10);
+  function daysOfWeek(k) { const end = ANCHOR + k * 7 * DAY; return Array.from({ length: 7 }, (_, i) => dayStr(end - (7 - i) * DAY)); }
+  function weekOfDay(ds) { return weekIndexFor(Date.parse(ds + 'T18:00:00Z')); }
+  const today = () => new Date().toLocaleDateString('en-CA');      // the listener's own date
 
   // ----- songs -----
   // Three sources, freshest wins: seed list (data.js) < your playlists (library.js) < weekly Spotify chart (auto.js)
@@ -264,12 +270,13 @@
       const age = ageAt(x.s, 2 * c); return age >= 0 && age <= 16;
     }).map(x => ({ ...x, w: x.a ** 1.6 * (1.25 - x.known / 100) * (0.6 + 0.8 * hash(st.id + x.s.id + ':' + c)) }))
       .sort((p, q) => q.w - p.w);
-    return pickDistinct(ranked, 2).map(x => ({ song: x.s, start: 2 * c, role: hash(st.id + x.s.id + ':b' + c) < 0.35 ? 'breakout' : 'test', auto: true }));
+    return pickDistinct(ranked, 2).map(x => ({ song: x.s, start: 2 * c, day: daysOfWeek(2 * c)[Math.floor(hash(st.id + x.s.id + ':pd') * 7)], role: hash(st.id + x.s.id + ':b' + c) < 0.35 ? 'breakout' : 'test', auto: true }));
   }); }
   function addPicks(st, x) { return memoPick(st.id + ':a' + x, () => {
     const ranked = mdCandidates(st).filter(c => { const age = ageAt(c.s, x); return age >= 1 && age <= 2; })
       .map(c => ({ ...c, w: c.a ** 2 * (0.5 + hash(st.id + c.s.id + ':a')) })).sort((p, q) => q.w - p.w);
-    return pickDistinct(ranked, 3).map(c => ({ song: c.s, start: x, role: 'add', auto: true }));
+    // each add lands on its own day of the week, so stations add songs day by day
+    return pickDistinct(ranked, 3).map(c => ({ song: c.s, start: x, day: daysOfWeek(x)[Math.floor(hash(st.id + c.s.id + ':ad') * 7)], role: 'add', auto: true }));
   }); }
   // what the station is pushing in week x: Map songId → { song, start, role, auto }
   function director(st, x) {
@@ -292,7 +299,7 @@
   // the station's plants this week: its hand-picked ones while they're fresh, then its own picks
   function activePlants(st, x) {
     const hand = st.plants.map(r => SONGS.get(r[0])).filter(s => s && ageAt(s, x) <= 14).map(song => ({ song, auto: false, role: 'plant' }));
-    const auto = [...director(st, x).values()].filter(p => p.role !== 'add').sort((a, b) => b.start - a.start);
+    const auto = [...director(st, x).values()].filter(p => p.role !== 'add' && !(p.day && p.day > today())).sort((a, b) => b.start - a.start);
     return [...hand, ...auto].slice(0, 8);
   }
 
@@ -322,6 +329,7 @@
     return spinMemo.get(key);
   }
   const memo = new Map();
+  const MAX_DEBUTS = 3;
   function rawChart(st, x) {
     const key = st.id + ':' + x;
     if (memo.has(key)) return memo.get(key);
@@ -334,11 +342,16 @@
     // chart rules: debuts enter no higher than #15, nothing climbs more than 10 spots in a week
     const lastPos = x > EARLIEST() ? new Map(rawChart(st, x - 1).chart.map(c => [c.song.id, c.pos])) : new Map();
     const pool = kept.map(r => ({ ...r, best: lastPos.has(r.song.id) ? Math.max(1, lastPos.get(r.song.id) - 10) : 15 }));
-    const chart = [];
+    // and at most MAX_DEBUTS new songs (debuts or re-entries) a week, like a real station's weekly adds
+    const chart = []; let debuts = 0;
+    const isNew = (r) => x > EARLIEST() && !lastPos.has(r.song.id);
     for (let p = 1; p <= CHART_SIZE && pool.length; p++) {
-      let i = pool.findIndex(r => r.best <= p);
+      let i = pool.findIndex(r => r.best <= p && (!isNew(r) || debuts < MAX_DEBUTS));
+      if (i < 0) i = pool.findIndex(r => !isNew(r) || debuts < MAX_DEBUTS);
       if (i < 0) i = 0;
-      chart.push({ pos: p, ...pool.splice(i, 1)[0] });
+      const r = pool.splice(i, 1)[0];
+      if (isNew(r)) debuts++;
+      chart.push({ pos: p, ...r });
     }
     memo.set(key, { chart, ranked });
     return memo.get(key);
@@ -380,6 +393,26 @@
   }
 
   // Network chart: total spins across every station
+  // What changed at a station in chart week k: songs new to its Top 30 (debuts and re-entries), its music
+  // director's new adds and new plants, and songs that left the Top 30.
+  function weeklyAdds(st, k) {
+    const now = countdown(st, k), before = new Map(countdown(st, k - 1).map(e => [e.song.id, e]));
+    const ids = new Set(now.map(e => e.song.id));
+    const md = [...director(st, k).values()].filter(p => p.start === k);
+    return {
+      debuts: now.filter(e => e.move === 'NEW' || e.move === 'RE').map(e => ({ song: e.song, pos: e.pos, re: e.move === 'RE' })),
+      adds: md.filter(p => p.role === 'add').map(p => p.song),
+      plants: md.filter(p => p.role !== 'add').map(p => ({ song: p.song, push: p.role === 'breakout' })),
+      drops: [...before.values()].filter(e => !ids.has(e.song.id)).map(e => ({ song: e.song, lastPos: e.pos })),
+    };
+  }
+
+  // What a station's music director added on one day ('YYYY-MM-DD'): new adds and new plants.
+  function dailyAdds(st, ds) {
+    const md = [...director(st, weekOfDay(ds)).values()].filter(p => p.day === ds);
+    return { adds: md.filter(p => p.role === 'add').map(p => p.song), plants: md.filter(p => p.role !== 'add').map(p => ({ song: p.song, push: p.role === 'breakout' })) };
+  }
+
   // scope 'us': the US stations (the Network Top 40) · 'world': the stations abroad (the World Top 40)
   const inScope = (st, scope) => scope === 'world' ? !!st.country && st.country !== 'us' : !st.country || st.country === 'us';
   const netMemo = new Map();
@@ -451,7 +484,8 @@
     const medium = chart.filter(c => c.pos > 20).map(c => c.song);
     const md = director(st, k);
     const planted = new Set(activePlants(st, k).map(p => p.song.id));
-    const myAdds = [...md.values()].filter(p => p.role === 'add' && !inChart.has(p.song.id)).map(p => p.song);
+    const notYet = (p) => p.day && p.day > today();
+    const myAdds = [...md.values()].filter(p => p.role === 'add' && !inChart.has(p.song.id) && !notYet(p)).map(p => p.song);
     const adds = [...new Set([...myAdds, ...ranked.filter(r => !inChart.has(r.song.id) && !planted.has(r.song.id) && r.song.kind === 'current' && r.age <= 4).map(r => r.song)])];
     // recurrents: former hits off the chart, plus the station's 12–18-month-old songs from the playlists
     const libRec = (L.recurrents?.[st.id] || []).filter(([, , , , x]) => !(st.clean && x))
@@ -509,7 +543,7 @@
   root.RadioEngine = {
     addStation, removeStation, previewChart, durationOf, songKey,
     STATIONS, byId, SONGS, GOLD, goldFor, custom, AUTO: A, LIBRARY: L, COMPOSITE: C, compositeChart, CHART_SIZE, NETWORK_SIZE,
-    weekIndexFor, weekEnding, countdown, isEstablished, FIRST_WEEK, inScope, networkReady: (k, scope = 'us') => netMemo.has(scope + ':' + k), networkChart, plantReport, rotation, stationSpins, hash,
+    weekIndexFor, weekEnding, countdown, isEstablished, FIRST_WEEK, inScope, weeklyAdds, dailyAdds, daysOfWeek, weekOfDay, today, networkReady: (k, scope = 'us') => netMemo.has(scope + ':' + k), networkChart, plantReport, rotation, stationSpins, hash,
     nowWeek: () => Math.max(0, weekIndexFor(Date.now())),
   };
 })(typeof window !== 'undefined' ? window : globalThis);
