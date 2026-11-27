@@ -453,7 +453,11 @@
     const planted = new Set(activePlants(st, k).map(p => p.song.id));
     const myAdds = [...md.values()].filter(p => p.role === 'add' && !inChart.has(p.song.id)).map(p => p.song);
     const adds = [...new Set([...myAdds, ...ranked.filter(r => !inChart.has(r.song.id) && !planted.has(r.song.id) && r.song.kind === 'current' && r.age <= 4).map(r => r.song)])];
-    const recurrents = ranked.filter(r => !inChart.has(r.song.id) && r.song.kind === 'current' && r.age > 26).slice(0, 15).map(r => r.song);
+    // recurrents: former hits off the chart, plus the station's 12–18-month-old songs from the playlists
+    const libRec = (L.recurrents?.[st.id] || []).filter(([, , , , x]) => !(st.clean && x))
+      .map(([id, title, artist, year, x]) => SONGS.get(id) || { id, title: cleanTitle(title), artist, year, kind: 'recurrent', x: !!x });
+    const recurrents = [...new Map([...ranked.filter(r => !inChart.has(r.song.id) && r.song.kind === 'current' && r.age > 26).slice(0, 15).map(r => r.song), ...libRec]
+      .filter(sg => !inChart.has(sg.id)).map(sg => [sg.id, sg])).values()];
     const deep = ranked.filter(r => !inChart.has(r.song.id) && r.song.kind === 'current' && r.age > 4 && r.age <= 26).slice(0, 40).map(r => r.song);
     const plants = activePlants(st, k).filter(p => !inChart.has(p.song.id)).map(p => p.song);
     const gold = goldFor(st);

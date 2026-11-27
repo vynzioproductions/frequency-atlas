@@ -53,7 +53,7 @@ for (const s of all.sort((a, b) => b.pop - a.pop)) {
 }
 
 // ---- throwbacks, shared out by station taste ----
-const minYear = D.GOLD_MIN_YEAR || 2010;
+const minYear = D.THROWBACK_MIN_YEAR || 1995;   // throwbacks: anything from 1995 on
 const cutoff = asOfMs - 78 * 7 * DAY; // at least 18 months old
 const homeOf = new Map();
 D.STATIONS.forEach(st => (st.home || []).forEach(a => homeOf.set(a.toLowerCase(), [...(homeOf.get(a.toLowerCase()) || []), st.id])));
@@ -73,35 +73,52 @@ const fit = (st, p) => {
   if (aff < 0.25) return 0;
   return aff * aff * (p.homes.has(st.id) ? 4 : 1) * (0.55 + 0.9 * hash(st.id + p.s.id)) * (0.6 + p.s.pop / 100);
 };
-// Share them out like a draft: stations take turns picking their best remaining fit, so every station
-// gets a full set (TARGET) and no song is on more than MAX_SHARE stations. Then every song nobody
-// picked goes to the station it suits best, so every eligible throwback is in rotation somewhere.
-const TARGET = 45, MAX_SHARE = 8, CEILING = 70;
-const ranked = Object.fromEntries(D.STATIONS.map(st => [st.id, pool.map((p, i) => [fit(st, p), i]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0])]));
-const picks = Object.fromEntries(D.STATIONS.map(st => [st.id, []]));
-const uses = new Array(pool.length).fill(0), cursor = Object.fromEntries(D.STATIONS.map(st => [st.id, 0]));
-for (let round = 0; round < TARGET; round++) {
-  for (const st of D.STATIONS) {
-    const list = ranked[st.id];
-    while (cursor[st.id] < list.length && uses[list[cursor[st.id]][1]] >= MAX_SHARE) cursor[st.id]++;
-    if (cursor[st.id] >= list.length) continue;
-    const [sc, i] = list[cursor[st.id]++];
-    picks[st.id].push([sc, i]); uses[i]++;
+// Share songs out like a draft: stations take turns picking their best remaining fit until each has
+// `target`, and no song is on more than `maxShare` stations. Then every song nobody picked goes to the
+// station it suits best (up to `ceiling`), so every eligible song is in rotation somewhere.
+function draft(list, target, maxShare, ceiling) {
+  const ranked = Object.fromEntries(D.STATIONS.map(st => [st.id, list.map((p, i) => [fit(st, p), i]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0])]));
+  const picks = Object.fromEntries(D.STATIONS.map(st => [st.id, []]));
+  const uses = new Array(list.length).fill(0), cursor = Object.fromEntries(D.STATIONS.map(st => [st.id, 0]));
+  for (let round = 0; round < target; round++) {
+    for (const st of D.STATIONS) {
+      const r = ranked[st.id];
+      while (cursor[st.id] < r.length && uses[r[cursor[st.id]][1]] >= maxShare) cursor[st.id]++;
+      if (cursor[st.id] >= r.length) continue;
+      const [sc, i] = r[cursor[st.id]++];
+      picks[st.id].push([sc, i]); uses[i]++;
+    }
   }
+  let homeless = 0;
+  list.forEach((p, i) => {
+    if (uses[i]) return;
+    const best = D.STATIONS.map(st => [fit(st, p), st]).filter(([sc, st]) => sc > 0 && picks[st.id].length < ceiling).sort((a, b) => b[0] - a[0])[0];
+    if (best) { picks[best[1].id].push([best[0], i]); uses[i]++; } else homeless++;
+  });
+  const out = {};
+  for (const [sid, l] of Object.entries(picks)) out[sid] = l.sort((a, b) => b[0] - a[0]).map(([, i]) => { const s = list[i].s; return [s.id, s.title, s.artist, s.year, s.x ? 1 : 0]; });
+  return { out, homeless };
 }
-let homeless = 0;
-pool.forEach((p, i) => {
-  if (uses[i]) return;
-  const best = D.STATIONS.map(st => [fit(st, p), st]).filter(([sc, st]) => sc > 0 && picks[st.id].length < CEILING).sort((a, b) => b[0] - a[0])[0];
-  if (best) { picks[best[1].id].push([best[0], i]); uses[i]++; } else homeless++;
-});
-const gold = {};
-for (const [sid, list] of Object.entries(picks)) gold[sid] = list.sort((a, b) => b[0] - a[0]).map(([, i]) => { const s = pool[i].s; return [s.id, s.title, s.artist, s.year, s.x ? 1 : 0]; });
-console.log(`throwbacks: ${pool.length} eligible, ${pool.length - homeless} in rotation somewhere${homeless ? ` (${homeless} fit no station)` : ''}`);
+const g = draft(pool, 45, 8, 70);
+const gold = g.out;
+console.log(`throwbacks (${minYear} on, 18+ months old): ${pool.length} eligible, ${pool.length - g.homeless} in rotation somewhere`);
+
+// ---- recurrents: songs 12–18 months old, too old to be new and too young to be throwbacks ----
+const recPool = [], recKeys = new Set();
+for (const s of [...all].sort((a, b) => b.pop - a.pop)) {
+  const gk = songKey(s.title, s.artist);
+  const weeks = (asOfMs - s.relMs) / (7 * DAY);
+  if (!(weeks > 52 && weeks <= 78) || isHoliday(s.title) || usedKeys.has(gk) || goldKeys.has(gk) || recKeys.has(gk) || handGoldKeys.has(gk)) continue;
+  recKeys.add(gk);
+  recPool.push({ s, tags: tagsFor(s.artists), homes: new Set(s.artists.flatMap(a => homeOf.get(a.toLowerCase()) || [])) });
+}
+const rc = draft(recPool, 12, 10, 25);
+const recurrents = rc.out;
+console.log(`recurrents (12–18 months old): ${recPool.length} eligible, ${recPool.length - rc.homeless} in rotation somewhere`);
 
 const explicit = all.filter(s => s.x).map(s => s.id);
 // song lengths (ms) by id and by title|artist, so the broadcast schedule knows when each song ends
 const durations = Object.fromEntries(all.filter(s => s.ms).map(s => [s.id, s.ms]));
 const durationsByKey = Object.fromEntries(all.filter(s => s.ms).map(s => [songKey(s.title, s.artist), s.ms]));
-writeJsGlobal('library.js', 'RADIO_LIBRARY', { built: asOf, files, currents, gold, explicit, durations, durationsByKey });
+writeJsGlobal('library.js', 'RADIO_LIBRARY', { built: asOf, files, currents, gold, recurrents, explicit, durations, durationsByKey });
 console.log(`library.js: ${currents.length} recent songs, ${Object.values(gold).reduce((a, b) => a + b.length, 0)} throwback slots across ${D.STATIONS.length} stations (from ${all.length} playlist tracks, week of ${asOf})`);

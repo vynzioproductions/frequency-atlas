@@ -1367,5 +1367,6 @@
     },
   ];
 
-  root.RADIO_DATA = { CURRENTS, GOLD, STATIONS, DATA_WEEK: '2026-11-27', GOLD_MIN_YEAR: 2010 };
+  root.RADIO_DATA = { CURRENTS, GOLD, STATIONS, DATA_WEEK: '2026-11-27', GOLD_MIN_YEAR: 2010, THROWBACK_MIN_YEAR: 1995 };
+  // GOLD_MIN_YEAR: nothing older than this on the charts; THROWBACK_MIN_YEAR: oldest year a throwback can be
 })(typeof window !== 'undefined' ? window : globalThis);
