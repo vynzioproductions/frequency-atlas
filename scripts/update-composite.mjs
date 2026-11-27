@@ -208,8 +208,8 @@ async function main() {
   // ---- the world: each country's Spotify daily chart, top 60, for the stations abroad ----
   let world = { charts: {} };
   try { world = loadBrowserData('composite.js').RADIO_COMPOSITE.world || world; } catch { /* first run */ }
-  const COUNTRIES = 'ca mx gb ie fr de nl es it se no dk pl pt tr br ar co cl pe kr jp ph id in au nz za ng ae sg th eg'.split(' ');
-  const LATIN = new Set(['mx', 'es', 'ar', 'co', 'cl', 'pe', 'br', 'pt']);
+  const COUNTRIES = 'ca mx gb ie fr de nl es it se no dk pl pt tr br ar co cl pe kr jp ph id in au nz za ng ae sg th eg at ch be cz gr fi tw hk my il vn do'.split(' ');
+  const LATIN = new Set(['mx', 'es', 'ar', 'co', 'cl', 'pe', 'br', 'pt', 'do']);
   let got = 0;
   for (const cc of COUNTRIES) {
     try {

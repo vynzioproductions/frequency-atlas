@@ -139,7 +139,7 @@ Every station picks its own music each week, the same for everyone (`engine.js` 
 - Hand-picked plants in `data.js` still play while they're fresh; after that the director's picks take over.
 - More songs in your playlists = more for the directors to choose from.
 
-48 stations: the original 28 plus Kansas City, St. Louis, Charlotte, Raleigh, Columbus, Indianapolis, Milwaukee, Pittsburgh, Tampa, Sacramento, Oklahoma City, Omaha, Anchorage, Louisville, Memphis, El Paso, Spokane, Charleston, Cleveland and Richmond. Name tags that would overlap on the map are hidden until you zoom in.
+The US stations include the original 28 plus Kansas City, St. Louis, Charlotte, Raleigh, Columbus, Indianapolis, Milwaukee, Pittsburgh, Tampa, Sacramento, Oklahoma City, Omaha, Anchorage, Louisville, Memphis, El Paso, Spokane, Charleston, Cleveland and Richmond. Name tags that would overlap on the map are hidden until you zoom in.
 
 ## Chart archive (back to January 2026)
 

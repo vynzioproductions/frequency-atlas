@@ -138,7 +138,7 @@
   const LATIN_CC = new Set(['mx', 'es', 'ar', 'co', 'cl', 'pe', 've', 'ec', 'gt', 'cr', 'pa', 'do', 'uy', 'bo', 'py', 'hn', 'sv', 'ni', 'cu', 'pr', 'br', 'pt']);
   const ASIA_POP = new Set(['kr', 'jp', 'th', 'tw', 'hk', 'vn', 'id', 'my', 'sg', 'ph']);
   // call letters where countries use them on air; a short brand code everywhere else
-  const CALL_PREFIX = { ca: () => 'C' + rnd(['F', 'H', 'I', 'J', 'K']), mx: () => 'XH', jp: () => 'JO', kr: () => 'HL', ph: () => 'DW', br: () => 'ZY', ar: () => 'LR', co: () => 'HJ', cl: () => 'CB', pe: () => 'OA', pr: () => 'W' };
+  const CALL_PREFIX = { ca: () => 'C' + rnd(['F', 'H', 'I', 'J', 'K']), mx: () => 'XH', jp: () => 'JO', kr: () => 'HL', ph: () => 'DW', br: () => 'ZY', ar: () => 'LR', co: () => 'HJ', cl: () => 'CB', pe: () => 'OA', pr: () => 'W', do: () => 'HI' };
   function callFor(word, lon, cc = 'us', d = null) {
     if (cc !== 'us' && !CALL_PREFIX[cc]) {
       if (d) d.brand = true;
